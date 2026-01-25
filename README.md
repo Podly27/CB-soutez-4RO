@@ -28,6 +28,46 @@ Local tests can be run as follows:
 docker exec ctvero-lumen vendor/bin/phpunit -v
 ```
 
+## Analýza projektu (stručný přehled)
+
+- **Stack:** PHP/Lumen aplikace s Docker/Docker Compose workflowem pro lokální vývoj, testy i deploy (viz `docker-compose.yml` a `docker/`).  
+- **CI/CD:** GitHub Actions (test + prod workflow) s tajným klíčem pro dešifrování `.env.gpg` a automatickým nasazením na `main`.  
+- **Konfigurace:** Aplikace používá `.env` (v produkci šifrovaný `.env.gpg`) a standardní Laravel/Lumen konfiguraci.  
+
+## Návrhy úprav / zlepšení
+
+1. **Aktualizace PHP verze a image**  
+   Zvážit přechod z PHP 7.4 (zmiňovaný v deploy kroku) na podporovanou LTS verzi PHP a odpovídající Alpine image.  
+2. **Bezpečnostní audit závislostí**  
+   Pravidelně kontrolovat composer závislosti a aktualizovat security fixy.  
+3. **Explicitní dokumentace domén a URL**  
+   Doplnit přehled, kde se nastavuje `APP_URL`/doména (v `.env`/`.env.gpg`) a jaký je dopad na generované odkazy.  
+4. **Monitoring & logy**  
+   Doplnit doporučení pro logování (rotace) a základní healthcheck endpoint.  
+5. **Případný upgrade Lumen**  
+   Pokud je framework starší, naplánovat upgrade (testy + ověření kompatibility).  
+
+## Postup / návod pro migraci na novou doménu
+
+Níže je bezpečný, krokový postup pro přesun na novou doménu:
+
+1. **Příprava DNS**  
+   - Připravte nové DNS záznamy (A/AAAA/CNAME) pro novou doménu.  
+   - Snižte TTL u stávajících záznamů před migrací pro rychlejší přepnutí.  
+2. **TLS certifikát**  
+   - Vystavte certifikát pro novou doménu (např. Let’s Encrypt) a připravte jej na serveru.  
+3. **Konfigurace aplikace**  
+   - Aktualizujte `APP_URL` v produkčním `.env` (resp. `.env.gpg`) na novou doménu.  
+   - Pokud existují hardcoded URL v šablonách/JS, upravte je.  
+4. **Webserver / reverse proxy**  
+   - Upravte v hostingu konfiguraci virtuálního hostu (v Apache/Nginx) na novou doménu.  
+5. **Přesměrování (301)**  
+   - Nastavte 301 redirect ze staré domény na novou, aby se zachovalo SEO.  
+6. **Testování**  
+   - Ověřte funkčnost: homepage, formuláře, API endpointy, statické soubory, HTTPS.  
+7. **Monitoring po nasazení**  
+   - Sledujte logy a chybovost po přepnutí DNS.  
+
 ### Deployment
 
 #### Automated Workflow (preferred)
