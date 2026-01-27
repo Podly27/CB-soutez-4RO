@@ -53,7 +53,7 @@ docker exec ctvero-lumen vendor/bin/phpunit -v
 4. **Monitoring & logy**  
    Doplnit doporučení pro logování (rotace) a základní healthcheck endpoint.  
    - Logy: doporučit rotaci na hostu nebo v kontejnerech (např. `logrotate` nebo Docker log driver).  
-   - Healthcheck: přidat jednoduchý endpoint (např. `/health`) vracející 200 OK a základní diagnostiku (DB připojení / verze).  
+   - Healthcheck: jednoduchý endpoint `/health` vrací 200 OK a základní diagnostiku (DB připojení, `APP_URL`, timestamp).  
 5. **Případný upgrade Lumen**  
    Pokud je framework starší, naplánovat upgrade (testy + ověření kompatibility).  
    - Postup: upgrade závislostí v `composer.json`, běh testů, kontrola deploy pipeline.  
@@ -132,3 +132,20 @@ If you discover a security vulnerability within Lumen, please send an e-mail to 
 ### License
 
 The Lumen framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Provozní poznámky
+
+### APP_URL / doména
+
+- **Lokální vývoj:** nastavuje se v `.env` (soubor není commitovaný).  
+- **Produkce:** hodnota je v `deploy-prod-files/.env.gpg` a dešifruje se v `prod` workflow.  
+- Změna `APP_URL` ovlivňuje generované odkazy (např. `route()`, URL helpery, odkazy v e-mailech).  
+
+### Healthcheck endpoint
+
+- `/health` vrací JSON se stavem aplikace a připojením na DB (200/500 podle stavu DB).  
+- Hodí se jako jednoduchý základ pro monitoring (uptime check, load balancer healthcheck).  
+
+### Logování
+
+- Doporučená je rotace logů buď na hostu (`logrotate`), nebo přes Docker log driver (např. `json-file` s limity).  
