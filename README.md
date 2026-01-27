@@ -38,14 +38,26 @@ docker exec ctvero-lumen vendor/bin/phpunit -v
 
 1. **Aktualizace PHP verze a image**  
    Zvážit přechod z PHP 7.4 (zmiňovaný v deploy kroku) na podporovanou LTS verzi PHP a odpovídající Alpine image.  
+   - Aktualizovat `docker-compose.yml`/`docker/` tak, aby nové image odpovídaly LTS verzi (např. 8.2).  
+   - Změnit build-arg `PHP_IMAGE_TAG` v deploy kroku (viz sekce „Deployment“).  
+   - Ověřit kompatibilitu s Lumen/Composer závislostmi.  
 2. **Bezpečnostní audit závislostí**  
    Pravidelně kontrolovat composer závislosti a aktualizovat security fixy.  
+   - Doporučení: pravidelně spouštět `composer audit` a aktualizovat balíčky podle výstupu.  
+   - Zvážit automatizaci v CI (např. týdenní scheduled job).  
 3. **Explicitní dokumentace domén a URL**  
    Doplnit přehled, kde se nastavuje `APP_URL`/doména (v `.env`/`.env.gpg`) a jaký je dopad na generované odkazy.  
+   - **Lokálně**: `.env` (není commitovaný).  
+   - **Produkce**: `deploy-prod-files/.env.gpg` (dešifrování v `prod` workflow).  
+   - Změna `APP_URL` ovlivňuje generované odkazy (např. URL helpery, případné odkazy v e-mailech).  
 4. **Monitoring & logy**  
    Doplnit doporučení pro logování (rotace) a základní healthcheck endpoint.  
+   - Logy: doporučit rotaci na hostu nebo v kontejnerech (např. `logrotate` nebo Docker log driver).  
+   - Healthcheck: přidat jednoduchý endpoint (např. `/health`) vracející 200 OK a základní diagnostiku (DB připojení / verze).  
 5. **Případný upgrade Lumen**  
    Pokud je framework starší, naplánovat upgrade (testy + ověření kompatibility).  
+   - Postup: upgrade závislostí v `composer.json`, běh testů, kontrola deploy pipeline.  
+   - Doporučení: upgrade rozdělit do menších kroků kvůli snadnému rollbacku.  
 
 ## Postup / návod pro migraci na novou doménu
 
