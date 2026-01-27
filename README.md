@@ -36,9 +36,9 @@ docker exec ctvero-lumen vendor/bin/phpunit -v
 
 ## Návrhy úprav / zlepšení
 
-1. **Aktualizace PHP verze a image**  
-   Zvážit přechod z PHP 7.4 (zmiňovaný v deploy kroku) na podporovanou LTS verzi PHP a odpovídající Alpine image.  
-   - Aktualizovat `docker-compose.yml`/`docker/` tak, aby nové image odpovídaly LTS verzi (např. 8.2).  
+1. **Aktualizace PHP verze a image (provedeno)**  
+   Přechod z PHP 7.4 na podporovanou LTS verzi PHP (8.2) a odpovídající Alpine image.  
+   - Aktualizovat `docker-compose.yml`/`docker/` tak, aby nové image odpovídaly LTS verzi (8.2).  
    - Změnit build-arg `PHP_IMAGE_TAG` v deploy kroku (viz sekce „Deployment“).  
    - Ověřit kompatibilitu s Lumen/Composer závislostmi.  
 2. **Bezpečnostní audit závislostí**  
@@ -100,7 +100,7 @@ Prerequisites:
 Deployment Steps:
 
 ```
-docker-compose build --build-arg PHP_IMAGE_TAG=7.4-fpm-alpine3.13 deploy-prod  # for PHP 7.4 webhosting as of 2021/09
+docker-compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 deploy-prod  # for PHP 8.2 LTS webhosting
 UID_GID="$(id -u):$(id -g)" CTVERO_DEPLOY_PROD_SECRET="some-very-long-secret" docker-compose up deploy-prod  # deploys the app
 ```
 
