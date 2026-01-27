@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 
 use App\Exceptions\AppException;
@@ -20,6 +21,26 @@ use App\Http\Utilities;
 */
 
 // Index page & related
+$router->get('/health', function () {
+    $dbStatus = [
+        'ok' => false,
+    ];
+
+    try {
+        DB::connection()->getPdo();
+        $dbStatus['ok'] = true;
+    } catch (\Throwable $exception) {
+        $dbStatus['error'] = $exception->getMessage();
+    }
+
+    return response()->json([
+        'status' => $dbStatus['ok'] ? 'ok' : 'degraded',
+        'timestamp' => date(DATE_ATOM),
+        'app_url' => config('app.url'),
+        'db' => $dbStatus,
+    ], $dbStatus['ok'] ? 200 : 500);
+});
+
 $router->get('/', [
     'as' => 'index',
     'uses' => '\App\Http\Controllers\IndexController@show'
