@@ -46,10 +46,10 @@ docker exec ctvero-lumen vendor/bin/phpunit -v
    - Doporučení: pravidelně spouštět `composer audit` a aktualizovat balíčky podle výstupu.  
    - Zvážit automatizaci v CI (např. týdenní scheduled job).  
 3. **Explicitní dokumentace domén a URL**  
-   Doplnit přehled, kde se nastavuje `APP_URL`/doména (v `.env`/`.env.gpg`) a jaký je dopad na generované odkazy.  
+   Přehled, kde se nastavuje `APP_URL`/doména a jaký je dopad na generované odkazy:  
    - **Lokálně**: `.env` (není commitovaný).  
    - **Produkce**: `deploy-prod-files/.env.gpg` (dešifrování v `prod` workflow).  
-   - Změna `APP_URL` ovlivňuje generované odkazy (např. URL helpery, případné odkazy v e-mailech).  
+   - Změna `APP_URL` ovlivňuje generované odkazy (např. URL helpery a případné odkazy v e-mailech).  
 4. **Monitoring & logy**  
    Doplnit doporučení pro logování (rotace) a základní healthcheck endpoint.  
    - Logy: doporučit rotaci na hostu nebo v kontejnerech (např. `logrotate` nebo Docker log driver).  
