@@ -28,57 +28,50 @@ Local tests can be run as follows:
 docker exec ctvero-lumen vendor/bin/phpunit -v
 ```
 
-## Analýza projektu (stručný přehled)
+## Analýza projektu (aktuální stav)
 
-- **Stack:** PHP/Lumen aplikace s Docker/Docker Compose workflowem pro lokální vývoj, testy i deploy (viz `docker-compose.yml` a `docker/`).  
-- **CI/CD:** GitHub Actions (test + prod workflow) s tajným klíčem pro dešifrování `.env.gpg` a automatickým nasazením na `main`.  
-- **Konfigurace:** Aplikace používá `.env` (v produkci šifrovaný `.env.gpg`) a standardní Laravel/Lumen konfiguraci.  
+- **Technologie a běh aplikace:** Lumen aplikace s definovanými routami v `routes/web.php`, včetně `/health` endpointu s kontrolou DB a vracením `APP_URL`.  
+- **Konfigurace:** `APP_URL` se čte z prostředí a používá se v konfiguraci aplikace. Další provozní odkazy (repo, issues, Mapbox, reCAPTCHA) jsou řízeny přes `.env` klíče v `config/ctvero.php`.  
+- **Autentizace:** OAuth callbacky pro Facebook/Google/Twitter jsou definovány v `config/services.php` a jejich hodnoty se čtou z `.env`.  
+- **CI/CD:**  
+  - `test.yml` spouští testy v Dockeru na PHP 8.2.  
+  - `security-audit.yml` spouští `composer audit` (včetně pravidelného plánování).  
+  - `prod.yml` nasazuje po úspěšných testech na `main`.  
+- **Deploy a tajemství:** Produkční deploy dešifruje `deploy-prod-files/.env.gpg` pomocí `CTVERO_DEPLOY_PROD_SECRET`, instaluje závislosti, publikuje artefakty přes FTP a volá API endpoint pro migrace.  
 
 ## Návrhy úprav / zlepšení
 
-1. **Aktualizace PHP verze a image (provedeno)**  
-   Přechod z PHP 7.4 na podporovanou LTS verzi PHP (8.2) a odpovídající Alpine image.  
-   - Aktualizovat `docker-compose.yml`/`docker/` tak, aby nové image odpovídaly LTS verzi (8.2).  
-   - Změnit build-arg `PHP_IMAGE_TAG` v deploy kroku (viz sekce „Deployment“).  
-   - Ověřit kompatibilitu s Lumen/Composer závislostmi.  
-2. **Bezpečnostní audit závislostí**  
-   Pravidelně kontrolovat composer závislosti a aktualizovat security fixy.  
-   - Doporučení: pravidelně spouštět `composer audit` a aktualizovat balíčky podle výstupu.  
-   - Zvážit automatizaci v CI (např. týdenní scheduled job).  
-3. **Explicitní dokumentace domén a URL**  
-   Přehled, kde se nastavuje `APP_URL`/doména a jaký je dopad na generované odkazy:  
-   - **Lokálně**: `.env` (není commitovaný).  
-   - **Produkce**: `deploy-prod-files/.env.gpg` (dešifrování v `prod` workflow).  
-   - Změna `APP_URL` ovlivňuje generované odkazy (např. URL helpery a případné odkazy v e-mailech).  
-4. **Monitoring & logy**  
-   Doplnit doporučení pro logování (rotace) a základní healthcheck endpoint.  
-   - Logy: doporučit rotaci na hostu nebo v kontejnerech (např. `logrotate` nebo Docker log driver).  
-   - Healthcheck: jednoduchý endpoint `/health` vrací 200 OK a základní diagnostiku (DB připojení, `APP_URL`, timestamp).  
-5. **Případný upgrade Lumen**  
-   Pokud je framework starší, naplánovat upgrade (testy + ověření kompatibility).  
-   - Postup: upgrade závislostí v `composer.json`, běh testů, kontrola deploy pipeline.  
-   - Doporučení: upgrade rozdělit do menších kroků kvůli snadnému rollbacku.  
+1. **Udržet konzistentní verze závislostí**  
+   - Doporučení: commitovat `composer.lock` a držet jej v repu, aby lokální/CI/build prostředí běželo na stejných verzích.  
+2. **Standardizovat konfiguraci domén a služeb**  
+   - Doplnit do dokumentace seznam `.env` klíčů, které jsou vázané na doménu: `APP_URL`, OAuth callbacky (Facebook/Google/Twitter), reCAPTCHA site key a případně `CTVERO_REPOSITORY_URL` / `CTVERO_ISSUES_REPORT_URL`.  
+3. **Přidat kontrolní checklist pro provoz**  
+   - Krátký checklist pro post-deploy (health endpoint, OAuth login, kontakt/formuláře, statická aktiva) sníží riziko regresí.  
+4. **Průběžná bezpečnostní hygiena**  
+   - Už existuje `security-audit.yml`, ale doporučuji navázat proces: řešit výstupy pravidelně a plánovat aktualizace závislostí (např. 1× měsíčně).  
+5. **Upgrade frameworku v menších krocích**  
+   - Pokud je Lumen starší, plánovat upgrade postupně (composer update → testy → staging → prod).  
 
 ## Postup / návod pro migraci na novou doménu
 
-Níže je bezpečný, krokový postup pro přesun na novou doménu:
+Níže je doporučený, bezpečný postup s jasnými kontrolami:
 
-1. **Příprava DNS**  
-   - Připravte nové DNS záznamy (A/AAAA/CNAME) pro novou doménu.  
-   - Snižte TTL u stávajících záznamů před migrací pro rychlejší přepnutí.  
-2. **TLS certifikát**  
-   - Vystavte certifikát pro novou doménu (např. Let’s Encrypt) a připravte jej na serveru.  
-3. **Konfigurace aplikace**  
-   - Aktualizujte `APP_URL` v produkčním `.env` (resp. `.env.gpg`) na novou doménu.  
-   - Pokud existují hardcoded URL v šablonách/JS, upravte je.  
+1. **Příprava DNS a certifikátu**  
+   - Připravte nové DNS záznamy (A/AAAA/CNAME) a snižte TTL pro rychlé přepnutí.  
+   - Vystavte TLS certifikát pro novou doménu (např. Let’s Encrypt).  
+2. **Aktualizace `.env`/secrets**  
+   - Změňte `APP_URL` v produkčním `.env` (resp. `deploy-prod-files/.env.gpg`).  
+   - Upravte OAuth callback URL (`FACEBOOK_CALLBACK_URL`, `GOOGLE_CALLBACK_URL`, `TWITTER_CALLBACK_URL`).  
+   - Zkontrolujte doménové klíče služeb: reCAPTCHA (site key), Mapbox, případně `CTVERO_REPOSITORY_URL` a `CTVERO_ISSUES_REPORT_URL`.  
+3. **Aplikace a API migrace**  
+   - Po nasazení ověřte `/health` endpoint a běh migrací (deploy je volá přes API).  
 4. **Webserver / reverse proxy**  
-   - Upravte v hostingu konfiguraci virtuálního hostu (v Apache/Nginx) na novou doménu.  
+   - Upravte v hostingu konfiguraci virtuálního hostu (Apache/Nginx) na novou doménu.  
 5. **Přesměrování (301)**  
-   - Nastavte 301 redirect ze staré domény na novou, aby se zachovalo SEO.  
-6. **Testování**  
-   - Ověřte funkčnost: homepage, formuláře, API endpointy, statické soubory, HTTPS.  
-7. **Monitoring po nasazení**  
-   - Sledujte logy a chybovost po přepnutí DNS.  
+   - Nastavte 301 redirect ze staré domény na novou kvůli SEO i zachování odkazů.  
+6. **Testovací checklist po migraci**  
+   - Ověřte homepage, formulář pro zprávu, přihlášení přes OAuth, endpointy API a statická aktiva.  
+   - Sledujte logy a chybovost v prvních hodinách po přepnutí.  
 
 ### Deployment
 
