@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\PageController;
 use App\Exceptions\Handler;
 
@@ -20,41 +19,47 @@ use App\Exceptions\Handler;
 
 // Index page & related
 $router->get('/health', function () {
-    $probePath = base_path('storage/logs/_probe.txt');
-    $canWriteTestfile = false;
-    try {
-        $bytes = @file_put_contents($probePath, 'probe');
-        if ($bytes !== false) {
-            $canWriteTestfile = true;
-            @unlink($probePath);
+    $safeValue = static function (callable $callback, $fallback) {
+        try {
+            return $callback();
+        } catch (\Throwable $e) {
+            return $fallback;
         }
-    } catch (\Throwable $e) {
-        $canWriteTestfile = false;
-    }
-
-    $dbConnectOk = false;
-    $dbError = null;
-    try {
-        DB::connection()->getPdo();
-        $dbConnectOk = true;
-    } catch (\Throwable $e) {
-        $dbConnectOk = false;
-        $dbError = sprintf('%s: %s', get_class($e), $e->getMessage());
-    }
+    };
 
     return response()->json([
         'status' => 'ok',
-        'php' => phpversion(),
-        'app_env' => env('APP_ENV'),
-        'app_key_present' => (bool) env('APP_KEY'),
-        'storage_writable' => is_writable(base_path('storage')),
-        'logs_writable' => is_writable(base_path('storage/logs')),
-        'cache_writable' => is_writable(base_path('bootstrap/cache')),
-        'can_write_testfile' => $canWriteTestfile,
-        'db_connect_ok' => $dbConnectOk,
-        'db_connect_error' => $dbError,
-        'vendor_present' => file_exists(base_path('vendor/autoload.php')),
-    ]);
+        'php' => $safeValue(static function () {
+            return phpversion();
+        }, 'unknown'),
+        'app_env' => $safeValue(static function () {
+            return env('APP_ENV');
+        }, 'unknown'),
+        'app_key_present' => $safeValue(static function () {
+            return (bool) env('APP_KEY');
+        }, false),
+        'vendor_present' => $safeValue(static function () {
+            return file_exists(base_path('vendor/autoload.php'));
+        }, false),
+        'storage_dir' => $safeValue(static function () {
+            return is_dir(base_path('storage'));
+        }, false),
+        'storage_writable' => $safeValue(static function () {
+            return is_writable(base_path('storage'));
+        }, false),
+        'logs_dir' => $safeValue(static function () {
+            return is_dir(base_path('storage/logs'));
+        }, false),
+        'logs_writable' => $safeValue(static function () {
+            return is_writable(base_path('storage/logs'));
+        }, false),
+        'cache_dir' => $safeValue(static function () {
+            return is_dir(base_path('bootstrap/cache'));
+        }, false),
+        'cache_writable' => $safeValue(static function () {
+            return is_writable(base_path('bootstrap/cache'));
+        }, false),
+    ], 200);
 });
 
 $router->get('/diag', function () {
@@ -65,19 +70,47 @@ $router->get('/diag', function () {
         abort(404);
     }
 
+    $safeValue = static function (callable $callback, $fallback) {
+        try {
+            return $callback();
+        } catch (\Throwable $e) {
+            return $fallback;
+        }
+    };
+
     $lastExceptionPath = storage_path('logs/last_exception.txt');
-    $lastException = null;
-    if (file_exists($lastExceptionPath)) {
-        $lastException = file_get_contents($lastExceptionPath);
+    $lastException = $safeValue(static function () use ($lastExceptionPath) {
+        if (! file_exists($lastExceptionPath)) {
+            return null;
+        }
+        if (! is_readable($lastExceptionPath)) {
+            return false;
+        }
+        return file_get_contents($lastExceptionPath);
+    }, false);
+
+    if ($lastException === false) {
+        return response()->json([
+            'status' => 'no-log',
+            'reason' => 'not readable/writable',
+        ], 200);
     }
 
     return response()->json([
-        'storage_framework_exists' => is_dir(storage_path('framework')),
-        'storage_writable' => is_writable(storage_path()),
-        'bootstrap_cache_writable' => is_writable(base_path('bootstrap/cache')),
-        'app_key_set' => strlen((string) config('app.key')) > 0,
+        'storage_framework_exists' => $safeValue(static function () {
+            return is_dir(storage_path('framework'));
+        }, false),
+        'storage_writable' => $safeValue(static function () {
+            return is_writable(storage_path());
+        }, false),
+        'bootstrap_cache_writable' => $safeValue(static function () {
+            return is_writable(base_path('bootstrap/cache'));
+        }, false),
+        'app_key_set' => $safeValue(static function () {
+            return strlen((string) config('app.key')) > 0;
+        }, false),
         'last_exception' => $lastException,
-    ]);
+    ], 200);
 });
 
 $router->get('/_setup/migrate', function () {
