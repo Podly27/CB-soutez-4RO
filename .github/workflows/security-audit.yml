@@ -12,18 +12,18 @@ on:
 
 jobs:
   composer-audit:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Clean up
         run: |
-          docker-compose down --rmi all -v --remove-orphans
+          docker compose down --rmi all -v --remove-orphans
           git clean -dfx
       - name: Composer audit
         run: |
-          docker-compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 lumen
-          docker-compose run --rm --entrypoint composer lumen audit
+          docker compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 lumen
+          docker compose run --rm --entrypoint composer lumen audit
       - name: Clean up
         run: |
-          docker-compose down --rmi all -v --remove-orphans
+          docker compose down --rmi all -v --remove-orphans
           git clean -dfx

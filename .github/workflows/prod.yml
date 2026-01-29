@@ -8,26 +8,26 @@ on:
 
 jobs:
   test:
-    uses: fivaldi/ctvero-rocnich-obdobi/.github/workflows/test.yml@main
+    uses: ./.github/workflows/test.yml
 
   prod:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     concurrency: common-test-deploy-prod-env
     environment: common-test-deploy-prod-env
     needs: test
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Clean up
         run: |
-          docker-compose down --rmi all -v --remove-orphans
+          docker compose down --rmi all -v --remove-orphans
           git clean -dfx
       - name: Deploy to production
         run: |
-          docker-compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 deploy-prod
-          UID_GID="$(id -u):$(id -g)" docker-compose up deploy-prod
+          docker compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 deploy-prod
+          UID_GID="$(id -u):$(id -g)" docker compose up deploy-prod
         env:
           CTVERO_DEPLOY_PROD_SECRET: ${{ secrets.CTVERO_DEPLOY_PROD_SECRET }}
       - name: Clean up
         run: |
-          docker-compose down --rmi all -v --remove-orphans
+          docker compose down --rmi all -v --remove-orphans
           git clean -dfx
