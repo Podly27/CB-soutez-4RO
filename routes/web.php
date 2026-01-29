@@ -97,7 +97,8 @@ $router->get('/kalendar', function () {
     return redirect(route('calendar', [ 'contest' => request()->input('soutez') ]));
 });
 $router->get('/contact', [
-    'as' => 'contact', function () {
+    'as' => 'contact',
+    'uses' => function () {
         return redirect(route('index') . '#contact-message');
     }
 ]);
@@ -118,7 +119,8 @@ $router->get('/contests', [
 
 // Client localization
 $router->get('/lang/{lang}', [
-    'as' => 'lang', function ($lang) {
+    'as' => 'lang',
+    'uses' => function ($lang) {
         if (in_array($lang, config('ctvero.locales'))) {
             request()->session()->put('locale', $lang);
             return Utilities::smartRedirect();
@@ -143,7 +145,8 @@ $router->get('/logout', [
 
 // Profile
 $router->get('/profile', [
-    'as' => 'profile', function() {
+    'as' => 'profile',
+    'uses' => function() {
         if (! Auth::check()) {
             throw new UnauthorizedHttpException('');
         }
@@ -175,7 +178,8 @@ $router->get('/hlaseni', function () {
 
 // Terms and privacy
 $router->get('/terms-and-privacy', [
-    'as' => 'termsAndPrivacy', function() {
+    'as' => 'termsAndPrivacy',
+    'uses' => function() {
         return view('terms-and-privacy')->with([ 'title' => __('Podmínky použití a Zásady ochrany osobních údajů') ]);
     }
 ]);
