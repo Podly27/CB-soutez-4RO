@@ -97,6 +97,13 @@ docker-compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 deploy-prod  #
 UID_GID="$(id -u):$(id -g)" CTVERO_DEPLOY_PROD_SECRET="some-very-long-secret" docker-compose up deploy-prod  # deploys the app
 ```
 
+#### InfinityFree hosting
+
+Pro jednoduchý hosting InfinityFree je připraven checklist a ukázkový `.env`:
+
+- `deploy-prod-files/INFINITYFREE.md`
+- `deploy-prod-files/.env.infinityfree.example`
+
 ### License
 
 This app is open-sourced software under the *Ham Spirit Transferred into IT* license :-).
