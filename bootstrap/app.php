@@ -104,7 +104,9 @@ $app->middleware([
 $app->register(App\Providers\AuthServiceProvider::class);
 // $app->register(App\Providers\EventServiceProvider::class);
 $app->register(Illuminate\Mail\MailServiceProvider::class);
-$app->register(Illuminate\Console\ConsoleServiceProvider::class);
+if (class_exists(\Illuminate\Console\ConsoleServiceProvider::class)) {
+    $app->register(\Illuminate\Console\ConsoleServiceProvider::class);
+}
 $app->register(Laravel\Socialite\SocialiteServiceProvider::class);
 
 /*
