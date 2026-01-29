@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\PageController;
 use App\Exceptions\Handler;
@@ -143,11 +142,37 @@ $router->get('/_setup/migrate', function () {
     }
 
     try {
-        Artisan::call('migrate', ['--force' => true]);
-        $output = "== migrate ==\n" . Artisan::output();
+        $migrationPath = function_exists('database_path')
+            ? database_path('migrations')
+            : base_path('database/migrations');
 
-        Artisan::call('db:seed', ['--force' => true]);
-        $output .= "\n== db:seed ==\n" . Artisan::output();
+        if (! is_dir($migrationPath)) {
+            return response("Migration path not found: {$migrationPath}", 500, ['Content-Type' => 'text/plain']);
+        }
+
+        $migrationFiles = glob($migrationPath . '/*.php');
+        if ($migrationFiles === false || count($migrationFiles) === 0) {
+            return response("No migration files found in: {$migrationPath}", 500, ['Content-Type' => 'text/plain']);
+        }
+
+        $db = app('db');
+        $repository = new \Illuminate\Database\Migrations\DatabaseMigrationRepository(
+            $db->getSchemaBuilder()->getConnection(),
+            'migrations'
+        );
+        if (! $repository->repositoryExists()) {
+            $repository->createRepository();
+        }
+        $files = app('files');
+        $migrator = new \Illuminate\Database\Migrations\Migrator($repository, $db, $files);
+        $bufferedOutput = new \Symfony\Component\Console\Output\BufferedOutput();
+        $migrator->setOutput($bufferedOutput);
+
+        $migrator->run($migrationPath, ['pretend' => false, 'step' => true]);
+        $output = $bufferedOutput->fetch();
+        if ($output === '') {
+            $output = "Migrations ran successfully.\n";
+        }
 
         file_put_contents($markerPath, 'completed_at=' . date(DATE_ATOM));
 
