@@ -14,7 +14,7 @@ services:
     build:
       context: docker
       args:
-        PHP_IMAGE_TAG: 8.2-fpm-alpine3.19
+        PHP_IMAGE_TAG: 8.3-fpm-alpine3.19
     ports:
       - 8000:8000
     environment:
@@ -52,7 +52,7 @@ services:
     build:
       context: docker
       args:
-        PHP_IMAGE_TAG: 8.2-fpm-alpine3.19
+        PHP_IMAGE_TAG: 8.3-fpm-alpine3.19
     environment:
       - CTVERO_DEPLOY_PROD=true
       - CTVERO_DEPLOY_PROD_SECRET

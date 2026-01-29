@@ -8,6 +8,19 @@ on:
   workflow_call:
 
 jobs:
+  php83-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - name: Install dependencies (no-dev)
+        run: composer install --no-dev --prefer-dist --optimize-autoloader
+      - name: Smoke test routes
+        run: php artisan route:list
+
   test:
     runs-on: ubuntu-latest
     concurrency: common-test-deploy-prod-env
@@ -18,9 +31,9 @@ jobs:
         run: |
           docker compose down --rmi all -v --remove-orphans
           git clean -dfx
-      - name: Run PHP 8.2 tests
+      - name: Run PHP 8.3 tests
         run: |
-          docker compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 lumen
+          docker compose build --build-arg PHP_IMAGE_TAG=8.3-fpm-alpine3.19 lumen
           docker compose up -d db
           UID_GID="$(id -u):$(id -g)" docker compose up lumen
       - name: Clean up
