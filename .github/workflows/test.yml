@@ -18,8 +18,11 @@ jobs:
           php-version: '8.3'
       - name: Install dependencies (no-dev)
         run: composer install --no-dev --prefer-dist --optimize-autoloader
-      - name: Smoke test routes
-        run: php artisan route:list
+      - name: Smoke test Lumen bootstrap
+        run: |
+          php artisan --version
+          php -r "require 'vendor/autoload.php'; echo \"autoload ok\n\";"
+          php -r "require 'bootstrap/app.php'; echo \"boot ok\n\";"
 
   test:
     runs-on: ubuntu-latest
