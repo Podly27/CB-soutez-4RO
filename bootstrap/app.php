@@ -65,6 +65,7 @@ $app->singleton(
 */
 
 $app->configure('app');
+$app->configure('view');
 
 /*
 |--------------------------------------------------------------------------
@@ -104,6 +105,7 @@ $app->middleware([
 $app->register(App\Providers\AuthServiceProvider::class);
 // $app->register(App\Providers\EventServiceProvider::class);
 $app->register(Illuminate\Mail\MailServiceProvider::class);
+$app->register(Illuminate\View\ViewServiceProvider::class);
 if (class_exists(\Illuminate\Console\ConsoleServiceProvider::class)) {
     $app->register(\Illuminate\Console\ConsoleServiceProvider::class);
 }
@@ -142,6 +144,9 @@ $app->alias('mail.manager', Illuminate\Contracts\Mail\Factory::class);
 $app->alias('mailer', Illuminate\Mail\Mailer::class);
 $app->alias('mailer', Illuminate\Contracts\Mail\Mailer::class);
 $app->alias('mailer', Illuminate\Contracts\Mail\MailQueue::class);
+
+$app->alias('view', Illuminate\View\Factory::class);
+$app->alias('view.finder', Illuminate\View\FileViewFinder::class);
 
 $app->alias('Socialite', Laravel\Socialite\Facades\Socialite::class);
 
