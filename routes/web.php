@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\PageController;
-
 /** @var \Laravel\Lumen\Routing\Router $router */
 
 /*
@@ -194,64 +192,64 @@ $router->get('/_setup/migrate', function () {
 
 $router->get('/', [
     'as' => 'index',
-    'uses' => PageController::class . '@indexSafe',
+    'uses' => 'PageController@indexSafe',
 ]);
 $router->get('/calendar', [
     'as' => 'calendar',
-    'uses' => '\App\Http\Controllers\CalendarController@download'
+    'uses' => 'CalendarController@download'
 ]);
 $router->get('/kalendar', function () {
     return redirect(route('calendar', [ 'contest' => request()->input('soutez') ]));
 });
 $router->get('/contact', [
     'as' => 'contact',
-    'uses' => PageController::class . '@contact',
+    'uses' => 'PageController@contact',
 ]);
 $router->post('/message', [
     'as' => 'message',
-    'uses' => '\App\Http\Controllers\MessageController@send'
+    'uses' => 'MessageController@send'
 ]);
 
 // Contest(s)
 $router->get('/contest/{name}', [
     'as' => 'contest',
-    'uses' => '\App\Http\Controllers\ContestController@show'
+    'uses' => 'ContestController@show'
 ]);
 $router->get('/contests', [
     'as' => 'contests',
-    'uses' => '\App\Http\Controllers\ContestController@showAll'
+    'uses' => 'ContestController@showAll'
 ]);
 
 // Client localization
 $router->get('/lang/{lang}', [
     'as' => 'lang',
-    'uses' => PageController::class . '@setLocale',
+    'uses' => 'PageController@setLocale',
 ]);
 
 // Login & logout
 $router->get('/login/{provider}', [
     'as' => 'login',
-    'uses' => '\App\Http\Controllers\LoginController@login'
+    'uses' => 'LoginController@login'
 ]);
 $router->get('/login/{provider}/callback', [
     'as' => 'loginCallback',
-    'uses' => '\App\Http\Controllers\LoginController@callback'
+    'uses' => 'LoginController@callback'
 ]);
 $router->get('/logout', [
     'as' => 'logout',
-    'uses' => '\App\Http\Controllers\LoginController@logout'
+    'uses' => 'LoginController@logout'
 ]);
 
 // Profile
 $router->get('/profile', [
     'as' => 'profile',
-    'uses' => PageController::class . '@profile',
+    'uses' => 'PageController@profile',
 ]);
 
 // Results
 $router->get('/results', [
     'as' => 'results',
-    'uses' => '\App\Http\Controllers\ResultsController@show'
+    'uses' => 'ResultsController@show'
 ]);
 $router->get('/vysledky', function () {
     return redirect(route('results'));
@@ -260,11 +258,11 @@ $router->get('/vysledky', function () {
 // Submission
 $router->get('/submission', [
     'as' => 'submissionForm',
-    'uses' => '\App\Http\Controllers\SubmissionController@show'
+    'uses' => 'SubmissionController@show'
 ]);
 $router->post('/submission', [
     'as' => 'submission',
-    'uses' => '\App\Http\Controllers\SubmissionController@submit'
+    'uses' => 'SubmissionController@submit'
 ]);
 $router->get('/hlaseni', function () {
     return redirect(route('submissionForm'));
@@ -273,11 +271,11 @@ $router->get('/hlaseni', function () {
 // Terms and privacy
 $router->get('/terms-and-privacy', [
     'as' => 'termsAndPrivacy',
-    'uses' => PageController::class . '@termsAndPrivacy',
+    'uses' => 'PageController@termsAndPrivacy',
 ]);
 
 // APIv0
 $router->addRoute([ 'GET', 'POST' ], '/api/v0/{category}/{endpoint}', [
     'as' => 'apiV0',
-    'uses' => '\App\Http\Controllers\ApiV0Controller@route'
+    'uses' => 'ApiV0Controller@route'
 ]);
