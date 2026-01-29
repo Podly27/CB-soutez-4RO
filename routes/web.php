@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
@@ -22,28 +23,71 @@ use App\Http\Utilities;
 
 // Index page & related
 $router->get('/health', function () {
-    $dbStatus = [
-        'ok' => false,
-    ];
+    return response()->json([
+        'status' => 'ok',
+        'php' => phpversion(),
+        'app' => config('app.name'),
+        'env' => app()->environment(),
+    ]);
+});
 
-    try {
-        DB::connection()->getPdo();
-        $dbStatus['ok'] = true;
-    } catch (\Throwable $exception) {
-        $dbStatus['error'] = $exception->getMessage();
+$router->get('/diag', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
     }
 
     return response()->json([
-        'status' => $dbStatus['ok'] ? 'ok' : 'degraded',
-        'timestamp' => date(DATE_ATOM),
-        'app_url' => config('app.url'),
-        'db' => $dbStatus,
-    ], $dbStatus['ok'] ? 200 : 500);
+        'storage_framework_exists' => is_dir(storage_path('framework')),
+        'storage_writable' => is_writable(storage_path()),
+        'bootstrap_cache_writable' => is_writable(base_path('bootstrap/cache')),
+        'app_key_set' => strlen((string) config('app.key')) > 0,
+    ]);
+});
+
+$router->get('/_setup/migrate', function () {
+    if (! app()->environment('production')) {
+        abort(404);
+    }
+
+    $token = env('SETUP_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
+    }
+
+    $markerPath = storage_path('app/setup_done');
+    if (file_exists($markerPath)) {
+        return response('Setup already completed.', 410, ['Content-Type' => 'text/plain']);
+    }
+
+    Artisan::call('migrate', ['--force' => true]);
+    $output = "== migrate ==\n" . Artisan::output();
+
+    Artisan::call('db:seed', ['--force' => true]);
+    $output .= "\n== db:seed ==\n" . Artisan::output();
+
+    file_put_contents($markerPath, 'completed_at=' . date(DATE_ATOM));
+
+    return response($output, 200, ['Content-Type' => 'text/plain']);
 });
 
 $router->get('/', [
     'as' => 'index',
-    'uses' => '\App\Http\Controllers\IndexController@show'
+    'uses' => function () {
+        try {
+            DB::connection()->getPdo();
+        } catch (\Throwable $exception) {
+            return response()->view('initializing', [
+                'message' => 'DB není nastavená nebo není inicializovaná. Dokončete nastavení.',
+            ], 200);
+        }
+
+        return app(\App\Http\Controllers\IndexController::class)->show();
+    }
 ]);
 $router->get('/calendar', [
     'as' => 'calendar',
