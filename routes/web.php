@@ -72,6 +72,10 @@ $router->get('/health', function () {
     ], 200);
 });
 
+$router->get('/_debug/response', function () {
+    return response()->json(['ok' => true], 200);
+});
+
 $router->get('/diag', function () {
     $token = env('DIAG_TOKEN');
     $requestToken = request()->query('token');

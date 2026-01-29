@@ -81,25 +81,42 @@ class Handler extends ExceptionHandler
     public static function storeLastException(Throwable $exception, $errorId = null)
     {
         $logPath = storage_path('logs/last_exception.txt');
-        if (! $errorId) {
-            try {
-                $errorId = bin2hex(random_bytes(4));
-            } catch (Throwable $e) {
-                $errorId = uniqid('err_', true);
-            }
-        }
-        $trace = $exception->getTraceAsString();
-        $payload = sprintf(
-            "id: %s\nmessage: %s\nlocation: %s:%s\ntrace:\n%s",
-            $errorId,
-            $exception->getMessage(),
-            $exception->getFile(),
-            $exception->getLine(),
-            $trace
-        );
-        $payload = substr($payload, 0, 2000);
-
         try {
+            if (! $errorId) {
+                try {
+                    $errorId = bin2hex(random_bytes(4));
+                } catch (Throwable $e) {
+                    $errorId = uniqid('err_', true);
+                }
+            }
+
+            $exceptionClass = get_class($exception);
+            $message = $exception->getMessage();
+            if ($message === '' || $message === null) {
+                try {
+                    $message = (string) $exception;
+                } catch (Throwable $e) {
+                    $message = sprintf(
+                        'code:%s at %s:%s',
+                        $exception->getCode(),
+                        $exception->getFile(),
+                        $exception->getLine()
+                    );
+                }
+            }
+
+            $trace = $exception->getTraceAsString();
+            $payload = sprintf(
+                "id: %s\nclass: %s\nmessage: %s\nlocation: %s:%s\ntrace:\n%s",
+                $errorId,
+                $exceptionClass,
+                $message,
+                $exception->getFile(),
+                $exception->getLine(),
+                $trace
+            );
+            $payload = substr($payload, 0, 2000);
+
             @file_put_contents($logPath, $payload);
         } catch (Throwable $e) {
             // Ignore logging failures to avoid cascading errors.

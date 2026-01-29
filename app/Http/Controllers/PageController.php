@@ -30,7 +30,12 @@ class PageController extends Controller
             ], 200);
         }
 
-        return app(IndexController::class)->show(request());
+        $response = app(IndexController::class)->show(request());
+        if (is_array($response)) {
+            return response()->json($this->normalizeJsonValue($response));
+        }
+
+        return $response;
     }
 
     public function contact()
@@ -62,5 +67,43 @@ class PageController extends Controller
         return view('terms-and-privacy')->with([
             'title' => __('Podmínky použití a Zásady ochrany osobních údajů'),
         ]);
+    }
+
+    private function normalizeJsonValue($value)
+    {
+        if (is_array($value)) {
+            $normalized = [];
+            foreach ($value as $key => $item) {
+                $normalized[$key] = $this->normalizeJsonValue($item);
+            }
+            return $normalized;
+        }
+
+        if ($value instanceof \Closure) {
+            return 'closure';
+        }
+
+        if (is_resource($value)) {
+            return 'resource:' . get_resource_type($value);
+        }
+
+        if (is_object($value)) {
+            if ($value instanceof \JsonSerializable) {
+                return $value;
+            }
+            if (method_exists($value, '__toString')) {
+                return (string) $value;
+            }
+            if ($value instanceof \Throwable) {
+                return [
+                    'class' => get_class($value),
+                    'message' => $value->getMessage(),
+                    'code' => $value->getCode(),
+                ];
+            }
+            return [ 'class' => get_class($value) ];
+        }
+
+        return $value;
     }
 }
