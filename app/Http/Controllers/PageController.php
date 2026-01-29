@@ -10,6 +10,16 @@ use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
 
 class PageController extends Controller
 {
+    public function indexSafe()
+    {
+        try {
+            return $this->index();
+        } catch (\Throwable $exception) {
+            $errorId = \App\Exceptions\Handler::storeLastException($exception);
+            return response('INIT ERROR ' . $errorId, 200, [ 'Content-Type' => 'text/plain' ]);
+        }
+    }
+
     public function index()
     {
         try {

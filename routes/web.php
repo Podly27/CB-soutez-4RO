@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\PageController;
-use App\Exceptions\Handler;
 
 /** @var \Laravel\Lumen\Routing\Router $router */
 
@@ -191,14 +190,7 @@ $router->get('/_setup/migrate', function () {
 
 $router->get('/', [
     'as' => 'index',
-    'uses' => function () {
-        try {
-            return app(PageController::class)->index();
-        } catch (\Throwable $e) {
-            $errorId = Handler::storeLastException($e);
-            return response('INIT ERROR ' . $errorId, 200, [ 'Content-Type' => 'text/plain' ]);
-        }
-    },
+    'uses' => PageController::class . '@indexSafe',
 ]);
 $router->get('/calendar', [
     'as' => 'calendar',
