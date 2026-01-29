@@ -9,21 +9,21 @@ on:
 
 jobs:
   test:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     concurrency: common-test-deploy-prod-env
     environment: common-test-deploy-prod-env
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Clean up
         run: |
-          docker-compose down --rmi all -v --remove-orphans
+          docker compose down --rmi all -v --remove-orphans
           git clean -dfx
       - name: Run PHP 8.2 tests
         run: |
-          docker-compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 lumen
-          docker-compose up -d db
-          UID_GID="$(id -u):$(id -g)" docker-compose up lumen
+          docker compose build --build-arg PHP_IMAGE_TAG=8.2-fpm-alpine3.19 lumen
+          docker compose up -d db
+          UID_GID="$(id -u):$(id -g)" docker compose up lumen
       - name: Clean up
         run: |
-          docker-compose down --rmi all -v --remove-orphans
+          docker compose down --rmi all -v --remove-orphans
           git clean -dfx
