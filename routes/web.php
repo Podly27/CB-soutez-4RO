@@ -154,16 +154,16 @@ $router->get('/_setup/migrate', function () {
             return response("No migration files found in: {$migrationPath}", 500, ['Content-Type' => 'text/plain']);
         }
 
-        $db = app('db');
+        $resolver = app('db');
         $repository = new \Illuminate\Database\Migrations\DatabaseMigrationRepository(
-            $db->getSchemaBuilder()->getConnection(),
+            $resolver,
             'migrations'
         );
         if (! $repository->repositoryExists()) {
             $repository->createRepository();
         }
         $files = app('files');
-        $migrator = new \Illuminate\Database\Migrations\Migrator($repository, $db, $files);
+        $migrator = new \Illuminate\Database\Migrations\Migrator($repository, $resolver, $files);
         $bufferedOutput = new \Symfony\Component\Console\Output\BufferedOutput();
         $migrator->setOutput($bufferedOutput);
 
