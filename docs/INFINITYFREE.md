@@ -1,5 +1,8 @@
 # InfinityFree deploy & databáze (bez SSH)
 
+## Požadavky
+- Hosting musí podporovat **PHP 8.3** (projekt je cílený na PHP 8.3).
+
 ## 1) Vytvoření databáze v InfinityFree
 1. Přihlas se do klientské zóny InfinityFree.
 2. Otevři **MySQL Databases**.
@@ -46,6 +49,7 @@
 
 ## 6) Poznámka k deployi
 - InfinityFree obvykle nemá Composer ani SSH, proto **je nutné nahrát i složku `vendor/`**.
+- `.env` se nedeployuje, vytvoř ho ručně na serveru dle kroku 2.
 - V CI je vhodné spouštět:
   ```bash
   composer install --no-dev --prefer-dist --optimize-autoloader

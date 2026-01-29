@@ -1,12 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
-
-use App\Exceptions\AppException;
-use App\Http\Utilities;
+use App\Http\Controllers\PageController;
 
 /** @var \Laravel\Lumen\Routing\Router $router */
 
@@ -77,17 +72,7 @@ $router->get('/_setup/migrate', function () {
 
 $router->get('/', [
     'as' => 'index',
-    'uses' => function () {
-        try {
-            DB::connection()->getPdo();
-        } catch (\Throwable $exception) {
-            return response()->view('initializing', [
-                'message' => 'DB není nastavená nebo není inicializovaná. Dokončete nastavení.',
-            ], 200);
-        }
-
-        return app(\App\Http\Controllers\IndexController::class)->show();
-    }
+    'uses' => PageController::class . '@index',
 ]);
 $router->get('/calendar', [
     'as' => 'calendar',
@@ -98,9 +83,7 @@ $router->get('/kalendar', function () {
 });
 $router->get('/contact', [
     'as' => 'contact',
-    'uses' => function () {
-        return redirect(route('index') . '#contact-message');
-    }
+    'uses' => PageController::class . '@contact',
 ]);
 $router->post('/message', [
     'as' => 'message',
@@ -120,13 +103,7 @@ $router->get('/contests', [
 // Client localization
 $router->get('/lang/{lang}', [
     'as' => 'lang',
-    'uses' => function ($lang) {
-        if (in_array($lang, config('ctvero.locales'))) {
-            request()->session()->put('locale', $lang);
-            return Utilities::smartRedirect();
-        }
-        throw new AppException(422, array(__('Neznámá lokalizace')));
-    }
+    'uses' => PageController::class . '@setLocale',
 ]);
 
 // Login & logout
@@ -146,12 +123,7 @@ $router->get('/logout', [
 // Profile
 $router->get('/profile', [
     'as' => 'profile',
-    'uses' => function() {
-        if (! Auth::check()) {
-            throw new UnauthorizedHttpException('');
-        }
-        return view('profile')->with([ 'title' => __('Můj profil') ]);
-    }
+    'uses' => PageController::class . '@profile',
 ]);
 
 // Results
@@ -179,9 +151,7 @@ $router->get('/hlaseni', function () {
 // Terms and privacy
 $router->get('/terms-and-privacy', [
     'as' => 'termsAndPrivacy',
-    'uses' => function() {
-        return view('terms-and-privacy')->with([ 'title' => __('Podmínky použití a Zásady ochrany osobních údajů') ]);
-    }
+    'uses' => PageController::class . '@termsAndPrivacy',
 ]);
 
 // APIv0
