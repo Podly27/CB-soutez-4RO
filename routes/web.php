@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\PageController;
 use App\Exceptions\Handler;
 
@@ -26,6 +27,15 @@ $router->get('/health', function () {
             return $fallback;
         }
     };
+
+    $dbConnectOk = false;
+    $dbError = null;
+    try {
+        DB::connection()->getPdo();
+        $dbConnectOk = true;
+    } catch (\Throwable $e) {
+        $dbError = preg_replace('/password\\s*=[^\\s]+/i', 'password=***', $e->getMessage());
+    }
 
     return response()->json([
         'status' => 'ok',
@@ -59,6 +69,8 @@ $router->get('/health', function () {
         'cache_writable' => $safeValue(static function () {
             return is_writable(base_path('bootstrap/cache'));
         }, false),
+        'db_connect_ok' => $dbConnectOk,
+        'db_error' => $dbError,
     ], 200);
 });
 
@@ -130,15 +142,26 @@ $router->get('/_setup/migrate', function () {
         return response('Setup already completed.', 410, ['Content-Type' => 'text/plain']);
     }
 
-    Artisan::call('migrate', ['--force' => true]);
-    $output = "== migrate ==\n" . Artisan::output();
+    try {
+        Artisan::call('migrate', ['--force' => true]);
+        $output = "== migrate ==\n" . Artisan::output();
 
-    Artisan::call('db:seed', ['--force' => true]);
-    $output .= "\n== db:seed ==\n" . Artisan::output();
+        Artisan::call('db:seed', ['--force' => true]);
+        $output .= "\n== db:seed ==\n" . Artisan::output();
 
-    file_put_contents($markerPath, 'completed_at=' . date(DATE_ATOM));
+        file_put_contents($markerPath, 'completed_at=' . date(DATE_ATOM));
 
-    return response($output, 200, ['Content-Type' => 'text/plain']);
+        return response($output, 200, ['Content-Type' => 'text/plain']);
+    } catch (\Throwable $e) {
+        $message = sprintf('%s in %s:%d', $e->getMessage(), $e->getFile(), $e->getLine());
+        try {
+            file_put_contents(storage_path('logs/last_exception.txt'), $message);
+        } catch (\Throwable $logException) {
+            // Best effort logging only.
+        }
+
+        return response($message, 500, ['Content-Type' => 'text/plain']);
+    }
 });
 
 $router->get('/', [
