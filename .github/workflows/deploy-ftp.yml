@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           port: ${{ secrets.FTP_PORT || '21' }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR || '/htdocs/' }}
+          server-dir: ${{ secrets.FTP_SERVER_DIR || 'htdocs/' }}
           local-dir: ./
           exclude: |
             **/.git*/**
@@ -26,7 +26,6 @@ jobs:
             **/deploy-prod-files/**
             **/docker/**
             **/node_modules/**
-            **/vendor/**
             **/tests/**
             **/.env*
             **/README.md
