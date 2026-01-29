@@ -53,6 +53,8 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
+        self::storeLastException($exception);
+
         if ($exception instanceof UnauthorizedHttpException) {
             return $this->errorJsonOrErrorPageResponse(__('Je vyžadováno přihlášení.'), 401);
         }
@@ -74,6 +76,36 @@ class Handler extends ExceptionHandler
         }
 
         return parent::render($request, $exception);
+    }
+
+    public static function storeLastException(Throwable $exception, $errorId = null)
+    {
+        $logPath = storage_path('logs/last_exception.txt');
+        if (! $errorId) {
+            try {
+                $errorId = bin2hex(random_bytes(4));
+            } catch (Throwable $e) {
+                $errorId = uniqid('err_', true);
+            }
+        }
+        $trace = $exception->getTraceAsString();
+        $payload = sprintf(
+            "id: %s\nmessage: %s\nlocation: %s:%s\ntrace:\n%s",
+            $errorId,
+            $exception->getMessage(),
+            $exception->getFile(),
+            $exception->getLine(),
+            $trace
+        );
+        $payload = substr($payload, 0, 2000);
+
+        try {
+            @file_put_contents($logPath, $payload);
+        } catch (Throwable $e) {
+            // Ignore logging failures to avoid cascading errors.
+        }
+
+        return $errorId;
     }
 
     public static function errorJsonOrErrorPageResponse($message, $statusCode)
