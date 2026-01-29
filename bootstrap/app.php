@@ -151,6 +151,7 @@ $app->configure('services');
 $app->router->group([
     'namespace' => 'App\Http\Controllers',
 ], function ($router) {
+    file_put_contents(storage_path('logs/route_trace.txt'), "loading routes: routes/web.php\n", FILE_APPEND);
     require __DIR__.'/../routes/web.php';
 });
 
