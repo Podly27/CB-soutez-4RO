@@ -227,6 +227,30 @@ $router->get('/lang/{lang}', [
 ]);
 
 // Login & logout
+$router->get('/auth/google', [
+    'as' => 'authGoogle',
+    'uses' => 'LoginController@loginGoogle',
+]);
+$router->get('/auth/google/callback', [
+    'as' => 'authGoogleCallback',
+    'uses' => 'LoginController@loginGoogleCallback',
+]);
+$router->get('/auth/facebook', [
+    'as' => 'authFacebook',
+    'uses' => 'LoginController@loginFacebook',
+]);
+$router->get('/auth/facebook/callback', [
+    'as' => 'authFacebookCallback',
+    'uses' => 'LoginController@loginFacebookCallback',
+]);
+$router->get('/auth/twitter', [
+    'as' => 'authTwitter',
+    'uses' => 'LoginController@loginTwitter',
+]);
+$router->get('/auth/twitter/callback', [
+    'as' => 'authTwitterCallback',
+    'uses' => 'LoginController@loginTwitterCallback',
+]);
 $router->get('/login/{provider}', [
     'as' => 'login',
     'uses' => 'LoginController@login'

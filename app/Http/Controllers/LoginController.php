@@ -13,6 +13,77 @@ use App\Models\User;
 
 class LoginController extends Controller
 {
+    private function providerConfig(string $provider): array
+    {
+        switch ($provider) {
+            case 'facebook':
+                $config = [
+                    'client_id' => env('FACEBOOK_APP_ID'),
+                    'client_secret' => env('FACEBOOK_APP_SECRET'),
+                    'redirect' => env('FACEBOOK_REDIRECT_URI'),
+                ];
+                break;
+            case 'google':
+                $config = [
+                    'client_id' => env('GOOGLE_CLIENT_ID'),
+                    'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+                    'redirect' => env('GOOGLE_REDIRECT_URI'),
+                ];
+                break;
+            case 'twitter':
+                $config = [
+                    'client_id' => env('TWITTER_CLIENT_ID'),
+                    'client_secret' => env('TWITTER_CLIENT_SECRET'),
+                    'redirect' => env('TWITTER_REDIRECT_URI'),
+                ];
+                break;
+            default:
+                throw new AppException(422, array(__('Neznámý nebo nepodporovaný poskytovatel autentizace: :provider', [ 'provider' => $provider ])));
+        }
+
+        $missing = [];
+        foreach ([ 'client_id', 'client_secret', 'redirect' ] as $key) {
+            if (! $config[$key]) {
+                $missing[] = $key;
+            }
+        }
+
+        if ($missing) {
+            throw new AppException(500, array(__('Chybí OAuth konfigurace pro :provider (:fields).', [
+                'provider' => $provider,
+                'fields' => implode(', ', $missing),
+            ])));
+        }
+
+        return $config;
+    }
+
+    private function socialiteDriver(string $provider)
+    {
+        config([ 'services.' . $provider => $this->providerConfig($provider) ]);
+
+        return Socialite::driver($provider);
+    }
+
+    private function logLastException(\Throwable $e): void
+    {
+        try {
+            $message = sprintf('%s: %s', get_class($e), $e->getMessage());
+            file_put_contents(storage_path('logs/last_exception.txt'), $message);
+        } catch (\Throwable $logException) {
+            // Best effort logging only.
+        }
+    }
+
+    private function handleOauthFailure(string $provider, \Throwable $e)
+    {
+        $this->logLastException($e);
+        Log::error('Error with OAuth provider:', [ $provider, $e->getMessage() ]);
+        Session::flash('errors', array(__('Chyba poskytovatele autentizace: :provider', [ 'provider' => $provider ])));
+
+        return redirect('/login');
+    }
+
     public function loginChecks($provider)
     {
         $registeredProviders = [
@@ -37,7 +108,11 @@ class LoginController extends Controller
         }
         Session::put('redirectUrlAfterLogin', request()->header('referer'));
 
-        return Socialite::with($provider)->redirect();
+        try {
+            return $this->socialiteDriver($provider)->redirect();
+        } catch (\Throwable $e) {
+            return $this->handleOauthFailure($provider, $e);
+        }
     }
 
     public function callback($provider)
@@ -48,11 +123,10 @@ class LoginController extends Controller
         }
 
         try {
-            $oauthUser = Socialite::driver($provider)->user();
+            $oauthUser = $this->socialiteDriver($provider)->user();
             Log::debug('Received OAuth user:', [ var_export($oauthUser, true) ]);
-        } catch (\Exception $e) {
-            Log::error('Error with OAuth provider:', [ $provider ]);
-            throw new AppException(503, array(__('Chyba poskytovatele autentizace: :provider', [ 'provider' => $provider ])));
+        } catch (\Throwable $e) {
+            return $this->handleOauthFailure($provider, $e);
         }
 
         $authInfo = [ 'name' => $oauthUser->getName(), 'email' => $oauthUser->getEmail() ];
@@ -95,5 +169,35 @@ class LoginController extends Controller
         Session::regenerateToken();
 
         return Utilities::smartRedirect();
+    }
+
+    public function loginGoogle()
+    {
+        return $this->login('google');
+    }
+
+    public function loginGoogleCallback()
+    {
+        return $this->callback('google');
+    }
+
+    public function loginFacebook()
+    {
+        return $this->login('facebook');
+    }
+
+    public function loginFacebookCallback()
+    {
+        return $this->callback('facebook');
+    }
+
+    public function loginTwitter()
+    {
+        return $this->login('twitter');
+    }
+
+    public function loginTwitterCallback()
+    {
+        return $this->callback('twitter');
     }
 }
