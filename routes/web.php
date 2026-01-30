@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 /** @var \Laravel\Lumen\Routing\Router $router */
 
 /*
@@ -72,6 +73,52 @@ $router->get('/health', function () {
 
 $router->get('/_debug/response', function () {
     return response()->json(['ok' => true], 200);
+});
+
+$router->get('/_debug/routes-auth', function () {
+    $routeSource = app('router')->getRoutes();
+    if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
+        $routes = $routeSource->getRoutes();
+    } elseif ($routeSource instanceof \Traversable) {
+        $routes = iterator_to_array($routeSource);
+    } else {
+        $routes = is_array($routeSource) ? $routeSource : [];
+    }
+
+    $matches = [];
+    foreach ($routes as $route) {
+        $uri = null;
+        $methods = [];
+
+        if ($route instanceof \Illuminate\Routing\Route) {
+            $uri = $route->uri();
+            $methods = $route->methods();
+        } elseif (is_array($route)) {
+            $uri = $route['uri'] ?? $route['path'] ?? null;
+            $methods = $route['methods'] ?? $route['method'] ?? [];
+        }
+
+        if (! $uri) {
+            continue;
+        }
+
+        $shouldInclude = Str::contains($uri, ['/auth', '/login', 'facebook', 'google', 'twitter']);
+
+        if (! $shouldInclude) {
+            continue;
+        }
+
+        if (is_string($methods)) {
+            $methods = [$methods];
+        }
+
+        $matches[] = [
+            'path' => $uri,
+            'methods' => array_values($methods),
+        ];
+    }
+
+    return response()->json($matches, 200);
 });
 
 $router->get('/diag', function () {
