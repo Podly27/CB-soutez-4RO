@@ -108,6 +108,10 @@
                     <form action="message" method="post" class="contact-form col-12" id='contact-form'>
                         <input type="hidden" name="_csrf" value="{{ Utilities::getCsrfToken() }}">
                         <div class="form-group align-items-center row">
+                            <label for="name" class="col-12 col-md-3">{{ __('Jméno') }}</label>
+                            <input name="name" type="text" class="form-control col-12 col-md-9" id="name" placeholder="{{ __('Vaše jméno') }}" value="{{ Auth::user()->name ?? '' }}">
+                        </div>
+                        <div class="form-group align-items-center row">
                             <label for="email" class="col-12 col-md-3">{{ __('E-mail') }}</label>
                             <input name="email" type="email" class="form-control col-12 col-md-9" id="email" placeholder="name@example.com" value="{{ Auth::user()->email ?? '' }}">
                         </div>
