@@ -44,30 +44,29 @@ class MessageController extends Controller
             ];
 
             $ownerMail = config('ctvero.ownerMail');
-            $mailSent = false;
-            if (! empty($ownerMail)) {
-                try {
-                    $msg = new MessageMail(
-                        $payload['name'],
-                        $payload['email'],
-                        $payload['subject'],
-                        $payload['message']
-                    );
-                    Mail::to($ownerMail)->send($msg);
-                    $mailSent = true;
-                } catch (Throwable $mailException) {
-                    $this->storeLastException($mailException);
-                }
-            } else {
-                $this->storeLastException(new \RuntimeException('Missing CTVERO_OWNER_MAIL config value.'));
+            if (empty($ownerMail)) {
+                $exception = new \RuntimeException('Missing CTVERO_OWNER_MAIL config value.');
+                $this->storeLastException($exception);
+                $this->storeLastMailError($exception);
+                $this->storeMessageFallback($payload, $request);
+                Session::flash('messageErrors', [__('Zprávu se nepodařilo odeslat, zkuste to prosím později.')]);
+                return redirect(route('index'));
             }
 
-            if (! $mailSent) {
-                if ($this->storeMessageFallback($payload, $request)) {
-                    Session::flash('messageSuccess', __('Zpráva byla přijata.'));
-                    return redirect(route('index'));
-                }
-                throw new \RuntimeException('Contact message fallback storage failed.');
+            try {
+                $msg = new MessageMail(
+                    $payload['name'],
+                    $payload['email'],
+                    $payload['subject'],
+                    $payload['message']
+                );
+                Mail::to($ownerMail)->send($msg);
+            } catch (Throwable $mailException) {
+                $this->storeLastException($mailException);
+                $this->storeLastMailError($mailException);
+                $this->storeMessageFallback($payload, $request);
+                Session::flash('messageErrors', [__('Zprávu se nepodařilo odeslat, zkuste to prosím později.')]);
+                return redirect(route('index'));
             }
 
             Session::flash('messageSuccess', __('Zpráva byla úspěšně odeslána.'));
@@ -103,6 +102,39 @@ class MessageController extends Controller
                 $exception->getTraceAsString()
             );
             $payload = substr($payload, 0, 2000);
+
+            @file_put_contents($logPath, $payload);
+        } catch (Throwable $logException) {
+            // Ignore logging failures to avoid cascading errors.
+        }
+    }
+
+    private function storeLastMailError(Throwable $exception): void
+    {
+        $logPath = storage_path('logs/last_mail_error.txt');
+        try {
+            $message = $exception->getMessage();
+            if ($message === '' || $message === null) {
+                $message = sprintf(
+                    'code:%s at %s:%s',
+                    $exception->getCode(),
+                    $exception->getFile(),
+                    $exception->getLine()
+                );
+            }
+
+            $message = preg_replace('/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i', '[redacted]', $message);
+            if ($message === null) {
+                $message = '[redacted]';
+            }
+
+            $payload = sprintf(
+                "class: %s\nmessage: %s\ncode: %s",
+                get_class($exception),
+                $message,
+                $exception->getCode()
+            );
+            $payload = substr($payload, 0, 500);
 
             @file_put_contents($logPath, $payload);
         } catch (Throwable $logException) {

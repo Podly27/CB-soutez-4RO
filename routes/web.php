@@ -175,6 +175,17 @@ $router->get('/diag', function () {
         return file_get_contents($lastRejectedProviderPath);
     }, false);
 
+    $lastMailErrorPath = storage_path('logs/last_mail_error.txt');
+    $lastMailError = $safeValue(static function () use ($lastMailErrorPath) {
+        if (! file_exists($lastMailErrorPath)) {
+            return null;
+        }
+        if (! is_readable($lastMailErrorPath)) {
+            return false;
+        }
+        return file_get_contents($lastMailErrorPath);
+    }, false);
+
     return response()->json([
         'storage_framework_exists' => $safeValue(static function () {
             return is_dir(storage_path('framework'));
@@ -190,6 +201,7 @@ $router->get('/diag', function () {
         }, false),
         'last_exception' => $lastException,
         'oauth_last_error' => $lastException,
+        'last_mail_error' => $lastMailError === false ? null : $lastMailError,
         'last_rejected_provider' => $lastRejectedProvider === false ? null : $lastRejectedProvider,
     ], 200);
 });
