@@ -99,18 +99,42 @@ class LoginController extends Controller
     private function logLastException(\Throwable $e): void
     {
         try {
-            $message = sprintf('%s: %s', get_class($e), $e->getMessage());
-            file_put_contents(storage_path('logs/last_exception.txt'), $message);
+            $previous = $e->getPrevious();
+            $traceLines = preg_split('/\r\n|\r|\n/', $e->getTraceAsString());
+            $tracePreview = array_slice($traceLines ?: [], 0, 20);
+            $payload = [
+                'class: ' . get_class($e),
+                'message: ' . $e->getMessage(),
+                'code: ' . $e->getCode(),
+                'previous: ' . ($previous ? sprintf('%s: %s', get_class($previous), $previous->getMessage()) : 'none'),
+                'trace:',
+                ...$tracePreview,
+            ];
+            file_put_contents(storage_path('logs/last_exception.txt'), implode(PHP_EOL, $payload));
         } catch (\Throwable $logException) {
             // Best effort logging only.
         }
+    }
+
+    private function shortOauthReason(\Throwable $e): string
+    {
+        $message = trim($e->getMessage());
+        if ($message === '') {
+            $message = get_class($e);
+        }
+
+        return Str::limit($message, 160);
     }
 
     private function handleOauthFailure(string $provider, \Throwable $e)
     {
         $this->logLastException($e);
         Log::error('Error with OAuth provider:', [ $provider, $e->getMessage() ]);
-        Session::flash('errors', array(__('Chyba poskytovatele autentizace: :provider', [ 'provider' => $provider ])));
+        if ($provider === 'facebook') {
+            Session::flash('errors', [ 'Facebook login error: ' . $this->shortOauthReason($e) ]);
+        } else {
+            Session::flash('errors', array(__('Chyba poskytovatele autentizace: :provider', [ 'provider' => $provider ])));
+        }
 
         return redirect('/login');
     }
@@ -132,9 +156,8 @@ class LoginController extends Controller
         }
     }
 
-    public function login($provider)
+    private function loginFlow(string $provider)
     {
-        $provider = $this->normalizeProvider($provider);
         if ($this->shouldRedirectFromLoginRoute()) {
             $target = self::LOGIN_REDIRECTS[$provider] ?? null;
             if ($target) {
@@ -154,9 +177,22 @@ class LoginController extends Controller
         }
     }
 
-    public function callback($provider)
+    public function login($provider)
     {
         $provider = $this->normalizeProvider($provider);
+        if ($provider === 'facebook') {
+            try {
+                return $this->loginFlow($provider);
+            } catch (\Throwable $e) {
+                return $this->handleOauthFailure($provider, $e);
+            }
+        }
+
+        return $this->loginFlow($provider);
+    }
+
+    private function callbackFlow(string $provider)
+    {
         if ($this->shouldRedirectFromLoginRoute()) {
             $target = self::LOGIN_REDIRECTS[$provider] ?? null;
             if ($target) {
@@ -199,6 +235,20 @@ class LoginController extends Controller
         Session::regenerateToken();
 
         return Utilities::smartRedirect(Session::pull('redirectUrlAfterLogin', NULL));
+    }
+
+    public function callback($provider)
+    {
+        $provider = $this->normalizeProvider($provider);
+        if ($provider === 'facebook') {
+            try {
+                return $this->callbackFlow($provider);
+            } catch (\Throwable $e) {
+                return $this->handleOauthFailure($provider, $e);
+            }
+        }
+
+        return $this->callbackFlow($provider);
     }
 
     public function logout()

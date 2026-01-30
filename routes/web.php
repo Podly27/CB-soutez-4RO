@@ -66,6 +66,15 @@ $router->get('/health', function () {
         'cache_writable' => $safeValue(static function () {
             return is_writable(base_path('bootstrap/cache'));
         }, false),
+        'has_facebook_client_id' => $safeValue(static function () {
+            return (bool) env('FACEBOOK_APP_ID');
+        }, false),
+        'has_facebook_client_secret' => $safeValue(static function () {
+            return (bool) env('FACEBOOK_APP_SECRET');
+        }, false),
+        'facebook_redirect_uri' => $safeValue(static function () {
+            return (string) env('FACEBOOK_REDIRECT_URI');
+        }, ''),
         'db_connect_ok' => $dbConnectOk,
         'db_error' => $dbError,
     ], 200);
@@ -180,6 +189,7 @@ $router->get('/diag', function () {
             return strlen((string) config('app.key')) > 0;
         }, false),
         'last_exception' => $lastException,
+        'oauth_last_error' => $lastException,
         'last_rejected_provider' => $lastRejectedProvider === false ? null : $lastRejectedProvider,
     ], 200);
 });
