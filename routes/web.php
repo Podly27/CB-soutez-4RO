@@ -56,7 +56,17 @@ $router->get('/health', function () {
         return substr($ownerMailRaw, 0, 3) . '***';
     }, '');
 
-    return response()->json([
+    $facebookId = $safeValue(static function () {
+        return env('FACEBOOK_APP_ID') ?: env('FACEBOOK_CLIENT_ID');
+    }, '');
+    $facebookSecret = $safeValue(static function () {
+        return env('FACEBOOK_APP_SECRET') ?: env('FACEBOOK_CLIENT_SECRET');
+    }, '');
+    $facebookSecretLength = $safeValue(static function () use ($facebookSecret) {
+        return is_string($facebookSecret) ? strlen($facebookSecret) : 0;
+    }, 0);
+
+    $healthPayload = [
         'status' => 'ok',
         'php' => $safeValue(static function () {
             return phpversion();
@@ -88,12 +98,22 @@ $router->get('/health', function () {
         'cache_writable' => $safeValue(static function () {
             return is_writable(base_path('bootstrap/cache'));
         }, false),
-        'has_facebook_client_id' => $safeValue(static function () {
-            return (bool) env('FACEBOOK_APP_ID');
+        'has_facebook_client_id' => $safeValue(static function () use ($facebookId) {
+            return (bool) $facebookId;
         }, false),
-        'has_facebook_client_secret' => $safeValue(static function () {
-            return (bool) env('FACEBOOK_APP_SECRET');
+        'has_facebook_client_secret' => $safeValue(static function () use ($facebookSecret) {
+            return (bool) $facebookSecret;
         }, false),
+        'facebook_id_present' => $safeValue(static function () use ($facebookId) {
+            return is_string($facebookId) && $facebookId !== '';
+        }, false),
+        'facebook_secret_present' => $safeValue(static function () use ($facebookSecret) {
+            return is_string($facebookSecret) && $facebookSecret !== '';
+        }, false),
+        'facebook_secret_length' => $facebookSecretLength,
+        'facebook_id_value' => $safeValue(static function () use ($facebookId) {
+            return is_string($facebookId) ? $facebookId : '';
+        }, ''),
         'facebook_redirect_uri' => $safeValue(static function () {
             return (string) env('FACEBOOK_REDIRECT_URI');
         }, ''),
@@ -103,7 +123,16 @@ $router->get('/health', function () {
         'owner_mail_hint' => $ownerMailHint,
         'db_connect_ok' => $dbConnectOk,
         'db_error' => $dbError,
-    ], 200);
+    ];
+
+    if ($facebookSecretLength < 10) {
+        $healthPayload['status'] = 'error';
+        $healthPayload['error'] = 'Facebook app secret je příliš krátký (méně než 10 znaků).';
+
+        return response()->json($healthPayload, 500);
+    }
+
+    return response()->json($healthPayload, 200);
 });
 
 $router->get('/_debug/response', function () {

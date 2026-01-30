@@ -2,8 +2,8 @@
 
 return [
     'facebook' => [
-        'client_id' => env('FACEBOOK_APP_ID'),
-        'client_secret' => env('FACEBOOK_APP_SECRET'),
+        'client_id' => env('FACEBOOK_APP_ID', env('FACEBOOK_CLIENT_ID')),
+        'client_secret' => env('FACEBOOK_APP_SECRET', env('FACEBOOK_CLIENT_SECRET')),
         'redirect' => env('FACEBOOK_REDIRECT_URI'),
     ],
     'google' => [
