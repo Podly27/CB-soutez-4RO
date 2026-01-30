@@ -34,6 +34,24 @@ $router->get('/health', function () {
         $dbError = preg_replace('/password\\s*=[^\\s]+/i', 'password=***', $e->getMessage());
     }
 
+    $ownerMailRaw = $safeValue(static function () {
+        return env('CTVERO_OWNER_MAIL');
+    }, null);
+    $ownerMailValue = $safeValue(static function () use ($ownerMailRaw) {
+        if (! is_string($ownerMailRaw) || $ownerMailRaw === '') {
+            return '';
+        }
+
+        if (strpos($ownerMailRaw, '@') !== false) {
+            [$local, $domain] = explode('@', $ownerMailRaw, 2);
+            $maskedLocal = $local === '' ? '' : substr($local, 0, 1) . str_repeat('*', max(0, strlen($local) - 1));
+
+            return $maskedLocal . '@' . $domain;
+        }
+
+        return str_repeat('*', strlen($ownerMailRaw));
+    }, '');
+
     return response()->json([
         'status' => 'ok',
         'php' => $safeValue(static function () {
@@ -75,6 +93,10 @@ $router->get('/health', function () {
         'facebook_redirect_uri' => $safeValue(static function () {
             return (string) env('FACEBOOK_REDIRECT_URI');
         }, ''),
+        'owner_mail_set' => $safeValue(static function () use ($ownerMailRaw) {
+            return is_string($ownerMailRaw) && $ownerMailRaw !== '';
+        }, false),
+        'owner_mail_value' => $ownerMailValue,
         'db_connect_ok' => $dbConnectOk,
         'db_error' => $dbError,
     ], 200);
