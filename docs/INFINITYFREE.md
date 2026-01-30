@@ -54,3 +54,20 @@
   ```bash
   composer install --no-dev --prefer-dist --optimize-autoloader
   ```
+
+## 7) OAuth callback URL a proměnné prostředí
+### Callback URL (nastav v Google/Facebook/Twitter console)
+- Google: `http://4ro.infinityfreeapp.com/auth/google/callback`
+- Facebook: `http://4ro.infinityfreeapp.com/auth/facebook/callback`
+- Twitter: `http://4ro.infinityfreeapp.com/auth/twitter/callback`
+
+### Povinné proměnné v `/htdocs/.env`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI`
+- `FACEBOOK_APP_ID`
+- `FACEBOOK_APP_SECRET`
+- `FACEBOOK_REDIRECT_URI`
+- `TWITTER_CLIENT_ID`
+- `TWITTER_CLIENT_SECRET`
+- `TWITTER_REDIRECT_URI`
