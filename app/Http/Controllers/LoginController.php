@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
 use App\Exceptions\AppException;
@@ -13,6 +14,36 @@ use App\Models\User;
 
 class LoginController extends Controller
 {
+    private const LOGIN_REDIRECTS = [
+        'facebook' => '/auth/facebook',
+        'google' => '/auth/google',
+        'twitter' => '/auth/twitter',
+    ];
+
+    private const PROVIDER_ALIASES = [
+        'fb' => 'facebook',
+    ];
+
+    private function normalizeProvider(string $provider): string
+    {
+        return self::PROVIDER_ALIASES[$provider] ?? $provider;
+    }
+
+    private function logRejectedProvider(string $provider): void
+    {
+        try {
+            $payload = sprintf('[%s] provider rejected: %s', date('c'), $provider);
+            file_put_contents(storage_path('logs/last_rejected_provider.txt'), $payload);
+        } catch (\Throwable $e) {
+            // Best effort logging only.
+        }
+    }
+
+    private function shouldRedirectFromLoginRoute(): bool
+    {
+        return Str::startsWith(request()->path(), 'login/');
+    }
+
     private function providerConfig(string $provider): array
     {
         switch ($provider) {
@@ -91,7 +122,8 @@ class LoginController extends Controller
             'google',
             'twitter',
         ];
-        if (! in_array($provider, $registeredProviders)) {
+        if (! in_array($provider, $registeredProviders, true)) {
+            $this->logRejectedProvider($provider);
             throw new AppException(422, array(__('Neznámý nebo nepodporovaný poskytovatel autentizace: :provider', [ 'provider' => $provider ])));
         }
         if (Auth::check()) {
@@ -102,6 +134,13 @@ class LoginController extends Controller
 
     public function login($provider)
     {
+        $provider = $this->normalizeProvider($provider);
+        if ($this->shouldRedirectFromLoginRoute()) {
+            $target = self::LOGIN_REDIRECTS[$provider] ?? null;
+            if ($target) {
+                return redirect($target);
+            }
+        }
         $redirect = $this->loginChecks($provider);
         if ($redirect) {
             return $redirect;
@@ -117,6 +156,13 @@ class LoginController extends Controller
 
     public function callback($provider)
     {
+        $provider = $this->normalizeProvider($provider);
+        if ($this->shouldRedirectFromLoginRoute()) {
+            $target = self::LOGIN_REDIRECTS[$provider] ?? null;
+            if ($target) {
+                return redirect($target . '/callback');
+            }
+        }
         $redirect = $this->loginChecks($provider);
         if ($redirect) {
             return $redirect;

@@ -155,6 +155,17 @@ $router->get('/diag', function () {
         ], 200);
     }
 
+    $lastRejectedProviderPath = storage_path('logs/last_rejected_provider.txt');
+    $lastRejectedProvider = $safeValue(static function () use ($lastRejectedProviderPath) {
+        if (! file_exists($lastRejectedProviderPath)) {
+            return null;
+        }
+        if (! is_readable($lastRejectedProviderPath)) {
+            return false;
+        }
+        return file_get_contents($lastRejectedProviderPath);
+    }, false);
+
     return response()->json([
         'storage_framework_exists' => $safeValue(static function () {
             return is_dir(storage_path('framework'));
@@ -169,6 +180,7 @@ $router->get('/diag', function () {
             return strlen((string) config('app.key')) > 0;
         }, false),
         'last_exception' => $lastException,
+        'last_rejected_provider' => $lastRejectedProvider === false ? null : $lastRejectedProvider,
     ], 200);
 });
 
