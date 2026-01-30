@@ -1,9 +1,22 @@
 # InfinityFree deploy & databáze (bez SSH)
 
-## Požadavky
-- Hosting musí podporovat **PHP 8.3** (projekt je cílený na PHP 8.3).
+Tento dokument shrnuje minimální kroky pro nasazení na InfinityFree tak, aby byl web znovu nasaditelný bez dohledávání detailů a aby v produkci nezůstaly debug díry.
 
-## 1) Vytvoření databáze v InfinityFree
+## A) Požadavky hostingu
+- **PHP 8.3**.
+- Writable adresáře:
+  - `storage/`
+  - `storage/logs/`
+  - `bootstrap/cache/`
+- Produkční URL (HTTPS): **https://4ro.infinityfreeapp.com**
+
+## B) Deploy pravidla
+- **`vendor/` musí být nasazený** (InfinityFree nemá Composer/SSH).
+- **`.env` se nedeployuje** – zůstává pouze na serveru.
+- `bootstrap/cache` musí existovat (hlídá se přes `bootstrap/cache/.gitignore`).
+
+## C) DB setup
+### 1) Vytvoření DB v InfinityFree
 1. Přihlas se do klientské zóny InfinityFree.
 2. Otevři **MySQL Databases**.
 3. Vytvoř databázi a uživatele (UI ti ukáže):
@@ -12,81 +25,63 @@
    - **DB Host** (např. `sqlXXX.infinityfree.com`)
    - **DB Password** (heslo, které nastavíš).
 
-## 2) .env na serveru
-1. V kořeni `/htdocs` (kde je `app/`, `bootstrap/`, `public/` atd.) vytvoř soubor `.env`.
-2. Použij vzor z `.env.example.infinityfree` a vyplň hodnoty z InfinityFree.
-3. **APP_KEY** musíš vygenerovat lokálně:
-   ```bash
-   php artisan key:generate --show
-   ```
-   Zkopíruj výstup do `.env` jako `APP_KEY=...`.
-4. **CTVERO_OWNER_MAIL** musí být nastavené v `.env` (adresa, kam se posílají zprávy z formuláře).
+### 2) `.env` proměnné DB_*
+V `.env` na serveru nastav minimálně:
+```
+DB_CONNECTION=mysql
+DB_HOST=sqlXXX.infinityfree.com
+DB_PORT=3306
+DB_DATABASE=if0_XXXXXXX_dbname
+DB_USERNAME=if0_XXXXXXX
+DB_PASSWORD=YOUR_PASSWORD
+```
 
-## 3) Oprávnění storage/ a bootstrap/cache/
-- Laravel/Lumen bez writable `storage/` a `bootstrap/cache/` často končí 500.
-- V InfinityFree File Manageru nastav práva (CHMOD) alespoň na `755` nebo `775` dle možností hostingu:
-  - `storage/`
-  - `bootstrap/cache/`
-
-## 4) Inicializace DB bez SSH (jednorázově)
+### 3) Jednorázové migrace přes /_setup/migrate
 1. Do `.env` dočasně přidej silný token:
    ```
    SETUP_TOKEN=nahodne_dlouhe_heslo
    ```
 2. Zavolej v prohlížeči:
    ```
-   https://<domena>/_setup/migrate?token=nahodne_dlouhe_heslo
+   https://4ro.infinityfreeapp.com/_setup/migrate?token=nahodne_dlouhe_heslo
    ```
 3. Po úspěchu se vytvoří marker `storage/app/setup_done` a endpoint vrátí **410 Gone** při dalším pokusu.
-4. **Doporučeno:** Po dokončení smaž `SETUP_TOKEN` z `.env`.
+4. **Po dokončení smaž `SETUP_TOKEN` z `.env`.**
 
-## 5) Diagnostika bez logů
-- Základní health-check (bez DB):
-  - `https://<domena>/health`
-- Dočasná diagnostika (token v `.env`):
-  - nastav `DIAG_TOKEN=...`
-  - otevři `https://<domena>/diag?token=...`
-  - endpoint kontroluje existenci `storage/framework`, writable `storage/` a `bootstrap/cache`, a zda je nastaven `APP_KEY`.
+## D) Diagnostika
+- **/health**
+  - Vrací JSON pouze se základními informacemi o konfiguraci a stavu (bez citlivých hodnot).
+  - Je bezpečný pro veřejné použití.
+- **/diag?token=...**
+  - Jen pro admina (DIAG_TOKEN z `.env`).
+  - Obsahuje detailnější diagnostiku posledních chyb.
+  - Doporučení: **DIAG_TOKEN držet mimo git**.
 
-## 6) Poznámka k deployi
-- InfinityFree obvykle nemá Composer ani SSH, proto **je nutné nahrát i složku `vendor/`**.
-- `.env` se nedeployuje, vytvoř ho ručně na serveru dle kroku 2.
-- V CI je vhodné spouštět:
-  ```bash
-  composer install --no-dev --prefer-dist --optimize-autoloader
-  ```
+## E) Časté chyby a řešení
+- **500 kvůli chybějícímu `bootstrap/cache/`**
+  - Vytvoř adresář a nastav práva (writable).
+- **500 kvůli chybějícímu `vendor/`**
+  - InfinityFree nemá Composer, nahraj `vendor/` z lokálního buildu.
+- **500 kvůli špatné PHP verzi / composer.lock mismatch**
+  - Nastav PHP 8.3 a přegeneruj `vendor/` pro odpovídající verzi.
 
-## 7) SMTP nastavení pro kontaktní formulář
-- InfinityFree nemusí podporovat `mail()` ani SMTP bez externí služby.
-- Doporučeno použít externí SMTP (např. Gmail, SendGrid, Mailgun).
-- V `.env` nastav alespoň:
-  ```
-  MAIL_MAILER=smtp
-  MAIL_HOST=smtp.gmail.com
-  MAIL_PORT=587
-  MAIL_USERNAME=uzivatel@example.com
-  MAIL_PASSWORD=heslo_nebo_app_password
-  MAIL_ENCRYPTION=tls
-  MAIL_FROM_ADDRESS=uzivatel@example.com
-  MAIL_FROM_NAME="Čtyři roční období"
+## Co je potřeba po deployi nastavit v `.env`
+- `APP_URL` na HTTPS doménu.
+- `APP_KEY` (vygeneruj lokálně: `php artisan key:generate --show`).
+- `DIAG_TOKEN` (pro admin diagnostiku).
+- `SETUP_TOKEN` **jen dočasně** pro jednorázové migrace (pak smazat).
+- `DB_*` proměnné (viz sekce C).
+- OAuth proměnné (viz `docs/OAUTH.md`).
+- Mail & kontakt (viz `docs/CONTACT.md`).
+- reCAPTCHA (pokud je zapnutá, viz `docs/CONTACT.md`).
 
-  CTVERO_OWNER_MAIL=cilovy@example.com
-  ```
-- Diagnostika konfigurace (bez hesla): `https://<domena>/_debug/mail?token=DIAG_TOKEN`
+## CI / Workflows (co se ověřuje)
+- CI běží na **PHP 8.3**.
+- Smoke test pro Lumen:
+  - `php artisan --version`
+  - bootstrap + autoload kontrola (bez `route:list`).
 
-## 8) OAuth callback URL a proměnné prostředí
-### Callback URL (nastav v Google/Facebook/Twitter console)
-- Google: `http://4ro.infinityfreeapp.com/auth/google/callback`
-- Facebook: `http://4ro.infinityfreeapp.com/auth/facebook/callback`
-- Twitter: `http://4ro.infinityfreeapp.com/auth/twitter/callback`
+## Poznámka k deployi
+- `.env` se vytváří ručně na serveru dle `.env.example.infinityfree`.
+- Secrets nikdy necommituj do gitu.
 
-### Povinné proměnné v `/htdocs/.env`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_REDIRECT_URI`
-- `FACEBOOK_APP_ID`
-- `FACEBOOK_APP_SECRET`
-- `FACEBOOK_REDIRECT_URI`
-- `TWITTER_CLIENT_ID`
-- `TWITTER_CLIENT_SECRET`
-- `TWITTER_REDIRECT_URI`

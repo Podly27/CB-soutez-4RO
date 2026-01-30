@@ -136,10 +136,24 @@ $router->get('/health', function () {
 });
 
 $router->get('/_debug/response', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
+    }
+
     return response()->json(['ok' => true], 200);
 });
 
 $router->get('/_debug/routes-auth', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
+    }
+
     $routeSource = app('router')->getRoutes();
     if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
         $routes = $routeSource->getRoutes();
