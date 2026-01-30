@@ -55,7 +55,25 @@
   composer install --no-dev --prefer-dist --optimize-autoloader
   ```
 
-## 7) OAuth callback URL a proměnné prostředí
+## 7) SMTP nastavení pro kontaktní formulář
+- InfinityFree nemusí podporovat `mail()` ani SMTP bez externí služby.
+- Doporučeno použít externí SMTP (např. Gmail, SendGrid, Mailgun).
+- V `.env` nastav alespoň:
+  ```
+  MAIL_MAILER=smtp
+  MAIL_HOST=smtp.gmail.com
+  MAIL_PORT=587
+  MAIL_USERNAME=uzivatel@example.com
+  MAIL_PASSWORD=heslo_nebo_app_password
+  MAIL_ENCRYPTION=tls
+  MAIL_FROM_ADDRESS=uzivatel@example.com
+  MAIL_FROM_NAME="Čtyři roční období"
+
+  CTVERO_OWNER_MAIL=cilovy@example.com
+  ```
+- Diagnostika konfigurace (bez hesla): `https://<domena>/_debug/mail?token=DIAG_TOKEN`
+
+## 8) OAuth callback URL a proměnné prostředí
 ### Callback URL (nastav v Google/Facebook/Twitter console)
 - Google: `http://4ro.infinityfreeapp.com/auth/google/callback`
 - Facebook: `http://4ro.infinityfreeapp.com/auth/facebook/callback`

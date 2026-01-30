@@ -10,8 +10,9 @@ class MessageMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct($from, $subject, $message)
+    public function __construct($name, $from, $subject, $message)
     {
+        $this->fromName = $name;
         $this->fromAddress = $from;
         $this->subj = $subject;
         $this->msg = $message;
@@ -21,6 +22,7 @@ class MessageMail extends Mailable
     {
         $subjPrefix = '[' . config('app.name') . '] ';
         return $this->subject($subjPrefix.$this->subj)->markdown('emails.message')->with([
+            'name' => $this->fromName,
             'from' => $this->fromAddress,
             'message' => $this->msg
         ]);

@@ -194,6 +194,27 @@ $router->get('/diag', function () {
     ], 200);
 });
 
+$router->get('/_debug/mail', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
+    }
+
+    $defaultMailer = config('mail.default');
+    $mailerConfig = config("mail.mailers.{$defaultMailer}", []);
+
+    return response()->json([
+        'mailer' => $defaultMailer,
+        'host' => $mailerConfig['host'] ?? null,
+        'port' => $mailerConfig['port'] ?? null,
+        'encryption' => $mailerConfig['encryption'] ?? null,
+        'from_address' => config('mail.from.address'),
+        'from_name' => config('mail.from.name'),
+    ], 200);
+});
+
 $router->get('/_setup/migrate', function () {
     if (! app()->environment('production')) {
         abort(404);

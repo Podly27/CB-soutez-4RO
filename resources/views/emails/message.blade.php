@@ -2,7 +2,7 @@
 Máte novou zprávu!
 ==================
 
-**Od:** <{{ $from }}>
+**Od:** {{ $name }} <{{ $from }}>
 
 **Obsah zprávy:** {{ $message }}
 
