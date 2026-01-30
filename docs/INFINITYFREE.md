@@ -20,6 +20,7 @@
    php artisan key:generate --show
    ```
    Zkopíruj výstup do `.env` jako `APP_KEY=...`.
+4. **CTVERO_OWNER_MAIL** musí být nastavené v `.env` (adresa, kam se posílají zprávy z formuláře).
 
 ## 3) Oprávnění storage/ a bootstrap/cache/
 - Laravel/Lumen bez writable `storage/` a `bootstrap/cache/` často končí 500.

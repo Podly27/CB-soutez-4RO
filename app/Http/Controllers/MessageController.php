@@ -47,9 +47,8 @@ class MessageController extends Controller
             if (empty($ownerMail)) {
                 $exception = new \RuntimeException('Missing CTVERO_OWNER_MAIL config value.');
                 $this->storeLastException($exception);
-                $this->storeLastMailError($exception);
                 $this->storeMessageFallback($payload, $request);
-                Session::flash('messageErrors', [__('Zprávu se nepodařilo odeslat, zkuste to prosím později.')]);
+                Session::flash('messageErrors', [__('Kontakt není nastaven. Zkuste později.')]);
                 return redirect(route('index'));
             }
 
