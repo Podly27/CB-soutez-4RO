@@ -19,19 +19,40 @@ class Utilities {
     {
         // FIXME: Workaround due to some mocking issues in PHPUnit when unit testing
         if (config('app.env') == 'testing') {
-            return;
+            return true;
         }
         if (Auth::check()) {
-            return;
+            return true;
         }
-        $recaptcha = new ReCaptcha(config('ctvero.recaptchaSecret'));
+        $recaptchaSecret = config('ctvero.recaptchaSecret');
+        if (empty($recaptchaSecret)) {
+            self::logRecaptchaWarning('Missing reCAPTCHA secret. Skipping validation.');
+            return true;
+        }
+        $recaptcha = new ReCaptcha($recaptchaSecret);
         $response = $recaptcha->setScoreThreshold(config('ctvero.recaptchaScoreThreshold'))
             ->verify(request()->input('g-recaptcha-response'), request()->ip());
         Log::info('Received reCAPTCHA response:', [ var_export($response, true) ]);
         if (! $response->isSuccess()) {
             throw new ForbiddenException();
         }
-        return $response;
+        return true;
+    }
+
+    private static function logRecaptchaWarning(string $message): void
+    {
+        $logPath = storage_path('logs/last_exception.txt');
+        try {
+            $payload = sprintf(
+                "class: %s\nmessage: %s\ntimestamp: %s",
+                \RuntimeException::class,
+                $message,
+                date(DATE_ATOM)
+            );
+            @file_put_contents($logPath, $payload);
+        } catch (\Throwable $logException) {
+            // Ignore logging failures to avoid cascading errors.
+        }
     }
 
     public static function contestL10n($contestName)

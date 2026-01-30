@@ -17,7 +17,10 @@ class MessageController extends Controller
     {
         try {
             Utilities::validateCsrfToken();
-            Utilities::checkRecaptcha();
+            if (! Utilities::checkRecaptcha()) {
+                Session::flash('messageErrors', [__('Captcha není nastavena')]);
+                return redirect(route('index'));
+            }
 
             $messages = [
                 'email' => __('Pole :attribute obsahuje neplatnou e-mailovou adresu.'),
