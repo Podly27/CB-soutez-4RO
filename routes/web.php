@@ -183,6 +183,17 @@ $router->get('/diag', function () {
         return file_get_contents($lastExceptionPath);
     }, false);
 
+    $lastOauthErrorPath = storage_path('logs/oauth_last_error.txt');
+    $lastOauthError = $safeValue(static function () use ($lastOauthErrorPath) {
+        if (! file_exists($lastOauthErrorPath)) {
+            return null;
+        }
+        if (! is_readable($lastOauthErrorPath)) {
+            return false;
+        }
+        return file_get_contents($lastOauthErrorPath);
+    }, false);
+
     if ($lastException === false) {
         return response()->json([
             'status' => 'no-log',
@@ -226,7 +237,7 @@ $router->get('/diag', function () {
             return strlen((string) config('app.key')) > 0;
         }, false),
         'last_exception' => $lastException,
-        'oauth_last_error' => $lastException,
+        'oauth_last_error' => $lastOauthError === false ? null : $lastOauthError,
         'last_mail_error' => $lastMailError === false ? null : $lastMailError,
         'last_rejected_provider' => $lastRejectedProvider === false ? null : $lastRejectedProvider,
     ], 200);

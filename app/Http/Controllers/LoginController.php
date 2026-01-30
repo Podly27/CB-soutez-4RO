@@ -116,6 +116,40 @@ class LoginController extends Controller
         }
     }
 
+    private function logOauthException(\Throwable $e): void
+    {
+        try {
+            $responseBody = null;
+            if ($e instanceof \GuzzleHttp\Exception\BadResponseException) {
+                $response = $e->getResponse();
+                if ($response) {
+                    $responseBody = (string) $response->getBody();
+                }
+            } elseif (method_exists($e, 'getResponse')) {
+                try {
+                    $response = $e->getResponse();
+                    if ($response) {
+                        $responseBody = (string) $response->getBody();
+                    }
+                } catch (\Throwable $responseException) {
+                    // Ignore response parsing errors.
+                }
+            }
+
+            $payload = [
+                'class: ' . get_class($e),
+                'message: ' . $e->getMessage(),
+                'code: ' . $e->getCode(),
+            ];
+            if ($responseBody !== null) {
+                $payload[] = 'response_body: ' . $responseBody;
+            }
+            file_put_contents(storage_path('logs/oauth_last_error.txt'), implode(PHP_EOL, $payload));
+        } catch (\Throwable $logException) {
+            // Best effort logging only.
+        }
+    }
+
     private function shortOauthReason(\Throwable $e): string
     {
         $message = trim($e->getMessage());
@@ -128,6 +162,7 @@ class LoginController extends Controller
 
     private function handleOauthFailure(string $provider, \Throwable $e)
     {
+        $this->logOauthException($e);
         $this->logLastException($e);
         Log::error('Error with OAuth provider:', [ $provider, $e->getMessage() ]);
         if ($provider === 'facebook') {
