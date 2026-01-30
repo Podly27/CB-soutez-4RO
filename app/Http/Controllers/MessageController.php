@@ -46,10 +46,12 @@ class MessageController extends Controller
                 'message' => trim((string) $request->input('message')),
             ];
 
-            $ownerMail = config('ctvero.ownerMail');
+            $ownerMail = env('CTVERO_OWNER_MAIL')
+                ?: env('CTVERO_OWNER_EMAIL')
+                ?: env('OWNER_MAIL')
+                ?: config('CTVERO_OWNER_MAIL')
+                ?: config('ctvero.owner_mail');
             if (empty($ownerMail)) {
-                $exception = new \RuntimeException('Missing CTVERO_OWNER_MAIL config value.');
-                $this->storeLastException($exception);
                 $this->storeMessageFallback($payload, $request);
                 Session::flash('messageErrors', [__('Kontakt není nastaven. Zkuste později.')]);
                 return redirect(route('index'));

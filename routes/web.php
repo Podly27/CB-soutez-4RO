@@ -35,21 +35,25 @@ $router->get('/health', function () {
     }
 
     $ownerMailRaw = $safeValue(static function () {
-        return env('CTVERO_OWNER_MAIL');
+        return env('CTVERO_OWNER_MAIL')
+            ?: env('CTVERO_OWNER_EMAIL')
+            ?: env('OWNER_MAIL');
     }, null);
-    $ownerMailValue = $safeValue(static function () use ($ownerMailRaw) {
+    $ownerMailHint = $safeValue(static function () use ($ownerMailRaw) {
         if (! is_string($ownerMailRaw) || $ownerMailRaw === '') {
             return '';
         }
 
         if (strpos($ownerMailRaw, '@') !== false) {
             [$local, $domain] = explode('@', $ownerMailRaw, 2);
-            $maskedLocal = $local === '' ? '' : substr($local, 0, 1) . str_repeat('*', max(0, strlen($local) - 1));
-
-            return $maskedLocal . '@' . $domain;
+            $maskedLocal = substr($local, 0, 3);
+            if ($maskedLocal === false) {
+                $maskedLocal = '';
+            }
+            return $maskedLocal . '***@' . $domain;
         }
 
-        return str_repeat('*', strlen($ownerMailRaw));
+        return substr($ownerMailRaw, 0, 3) . '***';
     }, '');
 
     return response()->json([
@@ -96,7 +100,7 @@ $router->get('/health', function () {
         'owner_mail_set' => $safeValue(static function () use ($ownerMailRaw) {
             return is_string($ownerMailRaw) && $ownerMailRaw !== '';
         }, false),
-        'owner_mail_value' => $ownerMailValue,
+        'owner_mail_hint' => $ownerMailHint,
         'db_connect_ok' => $dbConnectOk,
         'db_error' => $dbError,
     ], 200);
