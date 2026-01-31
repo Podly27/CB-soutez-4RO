@@ -17,10 +17,21 @@
 
     var defaultCenterPos = [49.06685705, 17.8955521]
     var map = L.map('map', {zoomSnap: 0.5, zoomDelta: 0.5, wheelPxPerZoomLevel: 120, tap: false}).setView(defaultCenterPos, zoom);
-    L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={{ config("ctvero.mapboxAccessToken") }}', {
+
+    const mapboxAccessToken = @json(config("ctvero.mapboxAccessToken"));
+    const mapboxTilesUrl = 'https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}';
+    const osmTilesUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const tilesUrl = mapboxAccessToken ? mapboxTilesUrl : osmTilesUrl;
+    const tilesOptions = mapboxAccessToken ? {
         attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Imagery &copy; <a href="https://www.mapbox.com">Mapbox</a>',
         id: 'mapbox/outdoors-v11',
         tileSize: 512,
         zoomOffset: -1,
-    }).addTo(map);
+        accessToken: mapboxAccessToken,
+    } : {
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+    };
+
+    L.tileLayer(tilesUrl, tilesOptions).addTo(map);
 </script>
