@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 
 use App\Exceptions\SubmissionException;
 use App\Http\Utilities;
+use App\Http\Parsers\CbpmrShareParser;
 use App\Models\Category;
 use App\Models\Contest;
 use App\Models\Diary;
@@ -72,24 +73,19 @@ class SubmissionController extends Controller
     public function processCbpmrInfo()
     {
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
-        $context = stream_context_create([ 'http' => [ 'follow_location' => false ] ]);
-        $html = file_get_contents($this->diaryUrl, false, $context);
-        $finalUrl = NULL;
-        foreach ($http_response_header as $header) {
-            if (preg_match('|^Location: /share/[^/]+/\d+|', $header)) {
-                $diaryId = trim(preg_replace('|.*/share/[^/]+/(\d+).*|', '$1', $header));
-                $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $diaryId;
-                break;
-            }
-        }
+        $parser = new CbpmrShareParser();
+        $parsed = $parser->parse($this->diaryUrl);
+        $header = $parsed['header'];
+        $entries = $parsed['entries'];
 
-        $auth = base64_encode(config('ctvero.cbpmrInfoApiAuthUsername') . ':' . config('ctvero.cbpmrInfoApiAuthPassword'));
-        $new_context = stream_context_create([ 'http' => [ 'header' => 'Authorization: Basic ' . $auth ] ]);
-        $data = json_decode(file_get_contents($finalUrl, false, $new_context));
-        $this->callSign = $data->callName;
-        $this->qthName = $data->place;
-        $this->qthLocator = $data->locator;
-        $this->qsoCount = $data->totalCalls;
+        $this->callSign = $header['exp_name'] ?? $header['my_place'] ?? 'CBPMR share';
+        $this->qthName = $header['my_place'] ?? $header['exp_name'] ?? 'CBPMR share';
+        $this->qthLocator = $header['my_locator'];
+        $this->qsoCount = count($entries);
+
+        if (! $this->qthLocator) {
+            throw new SubmissionException(422, [__('Nepodařilo se načíst lokátor stanoviště z cbpmr share.')]);
+        }
     }
 
     public function show(Request $request, $resetStep = false)
@@ -125,6 +121,8 @@ class SubmissionController extends Controller
                     $this->diaryUrl = $diaryUrl;
                     try {
                         $this->$processor();
+                    } catch (SubmissionException $e) {
+                        throw $e;
                     } catch (\Exception $e) {
                         throw new SubmissionException(500, array(__('Deník se nepodařilo načíst.')));
                     }
