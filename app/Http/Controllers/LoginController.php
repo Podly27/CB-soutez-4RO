@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
+use Illuminate\Database\QueryException;
 
 use App\Exceptions\AppException;
 use App\Http\Utilities;
@@ -151,6 +152,18 @@ class LoginController extends Controller
         }
     }
 
+    private function clearOauthLastError(): void
+    {
+        try {
+            $path = storage_path('logs/oauth_last_error.txt');
+            if (file_exists($path)) {
+                unlink($path);
+            }
+        } catch (\Throwable $e) {
+            // Best effort logging only.
+        }
+    }
+
     private function shortOauthReason(\Throwable $e): string
     {
         $message = trim($e->getMessage());
@@ -205,6 +218,7 @@ class LoginController extends Controller
             return $redirect;
         }
         Session::put('redirectUrlAfterLogin', request()->header('referer'));
+        $this->clearOauthLastError();
 
         try {
             return $this->socialiteDriver($provider)->redirect();
@@ -239,6 +253,7 @@ class LoginController extends Controller
         if ($redirect) {
             return $redirect;
         }
+        $this->clearOauthLastError();
 
         try {
             $oauthUser = $this->socialiteDriver($provider)->user();
@@ -251,6 +266,8 @@ class LoginController extends Controller
         $email = $oauthUser->getEmail() ?: null;
         $displayName = $oauthUser->getName() ?: $oauthUser->getNickname() ?: $providerUid;
         $nickname = $oauthUser->getNickname();
+        $placeholderEmail = $email ? null : ('x_' . $providerUid . '@users.local');
+        $usedPlaceholderEmail = false;
 
         $providerMatch = UserProvider::where('provider', $provider)
             ->where('provider_uid', $providerUid)
@@ -271,7 +288,24 @@ class LoginController extends Controller
             if ($nickname && ! User::where('nickname', $nickname)->exists()) {
                 $userData['nickname'] = $nickname;
             }
-            $user = User::create($userData);
+
+            try {
+                $user = User::create($userData);
+            } catch (QueryException $e) {
+                if ($email || ! $placeholderEmail) {
+                    throw $e;
+                }
+
+                $userData['email'] = $placeholderEmail;
+                $usedPlaceholderEmail = true;
+                if (! isset($userData['nickname'])) {
+                    $placeholderNickname = 'x_placeholder_' . $providerUid;
+                    if (! User::where('nickname', $placeholderNickname)->exists()) {
+                        $userData['nickname'] = $placeholderNickname;
+                    }
+                }
+                $user = User::create($userData);
+            }
             $user->save();
         }
 
@@ -283,6 +317,9 @@ class LoginController extends Controller
         ]);
         $user->save();
 
+        if ($usedPlaceholderEmail) {
+            Log::info('OAuth account created with placeholder email.', [ 'provider' => $provider, 'provider_uid' => $providerUid ]);
+        }
         $authInfo = [ 'name' => $user->name, 'email' => $user->email ];
         Auth::login($user);
         Log::info('Login successful for:', [ var_export($authInfo, true) ]);
