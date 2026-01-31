@@ -57,7 +57,16 @@ DB_PASSWORD=YOUR_PASSWORD
   - Obsahuje detailnější diagnostiku posledních chyb.
   - Doporučení: **DIAG_TOKEN držet mimo git**.
 
-## E) Časté chyby a řešení
+## E) Admin rozhraní
+- Admin rozhraní je dostupné na **/admin** (odkaz se zobrazuje jen adminům).
+- Admini jsou definovaní v `.env` pomocí e-mailu uživatele:
+  - `ADMIN_EMAILS="mail1@x.cz,mail2@y.cz"` (CSV seznam, mezery se ignorují).
+  - fallback `ADMIN_EMAIL="mail@x.cz"` pro jeden účet.
+- Admin může upravovat:
+  - Soutěže (název + termíny).
+  - Deníky (základní údaje, contest/kategorie, možnost smazání).
+
+## F) Časté chyby a řešení
 - **500 kvůli chybějícímu `bootstrap/cache/`**
   - Vytvoř adresář a nastav práva (writable).
 - **500 kvůli chybějícímu `vendor/`**
@@ -74,6 +83,7 @@ DB_PASSWORD=YOUR_PASSWORD
 - OAuth proměnné (viz `docs/OAUTH.md`).
 - Mail & kontakt (viz `docs/CONTACT.md`).
 - reCAPTCHA (pokud je zapnutá, viz `docs/CONTACT.md`).
+- `ADMIN_EMAILS` / `ADMIN_EMAIL` pro admin rozhraní (viz sekce E).
 
 ## CI / Workflows (co se ověřuje)
 - CI běží na **PHP 8.3**.
@@ -84,4 +94,3 @@ DB_PASSWORD=YOUR_PASSWORD
 ## Poznámka k deployi
 - `.env` se vytváří ručně na serveru dle `.env.example.infinityfree`.
 - Secrets nikdy necommituj do gitu.
-
