@@ -74,18 +74,43 @@ class SubmissionController extends Controller
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
         $context = stream_context_create([ 'http' => [ 'follow_location' => false ] ]);
         $html = file_get_contents($this->diaryUrl, false, $context);
+        if ($html === false) {
+            throw new \RuntimeException('Failed to load CBPMR.info share page.');
+        }
+
         $finalUrl = NULL;
-        foreach ($http_response_header as $header) {
-            if (preg_match('|^Location: /share/[^/]+/\d+|', $header)) {
-                $diaryId = trim(preg_replace('|.*/share/[^/]+/(\d+).*|', '$1', $header));
-                $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $diaryId;
-                break;
+        if (isset($http_response_header)) {
+            foreach ($http_response_header as $header) {
+                if (preg_match('|^Location: /share/[^/]+/\d+|', $header)) {
+                    $diaryId = trim(preg_replace('|.*/share/[^/]+/(\d+).*|', '$1', $header));
+                    $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $diaryId;
+                    break;
+                }
             }
+        }
+
+        if ($finalUrl === NULL && preg_match('|/share/[^/]+/(\d+)|', $html, $matches)) {
+            $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $matches[1];
+        }
+
+        $shareToken = NULL;
+        if (preg_match('|/share/([^/?#]+)|', $this->diaryUrl, $matches)) {
+            $shareToken = $matches[1];
+        }
+        if ($finalUrl === NULL && $shareToken) {
+            $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $shareToken;
+        }
+
+        if ($finalUrl === NULL) {
+            throw new \RuntimeException('Failed to resolve CBPMR.info API URL.');
         }
 
         $auth = base64_encode(config('ctvero.cbpmrInfoApiAuthUsername') . ':' . config('ctvero.cbpmrInfoApiAuthPassword'));
         $new_context = stream_context_create([ 'http' => [ 'header' => 'Authorization: Basic ' . $auth ] ]);
         $data = json_decode(file_get_contents($finalUrl, false, $new_context));
+        if (! $data || ! isset($data->callName, $data->place, $data->locator, $data->totalCalls)) {
+            throw new \RuntimeException('Invalid CBPMR.info API response.');
+        }
         $this->callSign = $data->callName;
         $this->qthName = $data->place;
         $this->qthLocator = $data->locator;
