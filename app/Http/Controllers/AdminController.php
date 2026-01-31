@@ -29,6 +29,14 @@ class AdminController extends Controller
         ]);
     }
 
+    public function contestsCreate()
+    {
+        return view('admin.contests.create', [
+            'title' => __('Nové kolo'),
+            'defaults' => $this->defaultContestDates(),
+        ]);
+    }
+
     public function contestsEdit($id)
     {
         $contest = Contest::find($id);
@@ -40,6 +48,71 @@ class AdminController extends Controller
             'title' => __('Upravit soutěž'),
             'contest' => $contest,
         ]);
+    }
+
+    public function contestsStore(Request $request)
+    {
+        Utilities::validateCsrfToken();
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'contest_start' => 'required|string',
+            'contest_end' => 'required|string',
+            'submission_start' => 'required|string',
+            'submission_end' => 'required|string',
+        ], Utilities::validatorMessages());
+
+        if ($validator->fails()) {
+            Session::flash('errors', $validator->errors()->all());
+            return redirect(route('adminContestCreate'));
+        }
+
+        $contestStart = $this->parseAdminDateTime($request->input('contest_start'));
+        $contestEnd = $this->parseAdminDateTime($request->input('contest_end'));
+        $submissionStart = $this->parseAdminDateTime($request->input('submission_start'));
+        $submissionEnd = $this->parseAdminDateTime($request->input('submission_end'));
+
+        if (! $contestStart || ! $contestEnd || ! $submissionStart || ! $submissionEnd) {
+            Session::flash('errors', [__('Datum a čas musí být ve formátu RRRR-MM-DD HH:MM.')]);
+            return redirect(route('adminContestCreate'));
+        }
+
+        if ($contestStart->gt($contestEnd)) {
+            Session::flash('errors', [__('Začátek soutěže musí být dříve než konec.')]);
+            return redirect(route('adminContestCreate'));
+        }
+
+        if ($submissionStart->gt($submissionEnd)) {
+            Session::flash('errors', [__('Začátek odesílání musí být dříve než konec.')]);
+            return redirect(route('adminContestCreate'));
+        }
+
+        if ($submissionStart->lt($contestStart)) {
+            Session::flash('errors', [__('Začátek odesílání nesmí být dříve než začátek soutěže.')]);
+            return redirect(route('adminContestCreate'));
+        }
+
+        $payload = [
+            'name' => trim((string) $request->input('name')),
+            'contest_start' => $contestStart->format('Y-m-d H:i:s'),
+            'contest_end' => $contestEnd->format('Y-m-d H:i:s'),
+            'submission_start' => $submissionStart->format('Y-m-d H:i:s'),
+            'submission_end' => $submissionEnd->format('Y-m-d H:i:s'),
+        ];
+
+        $contest = new Contest();
+        $contest->fill($payload);
+        $contest->save();
+
+        $this->logAdminAction(
+            Auth::user()->email ?? null,
+            'contest_create',
+            $contest->id,
+            ['fields' => $payload]
+        );
+
+        Session::flash('successes', [__('Kolo vytvořeno')]);
+        return redirect(route('adminContestEdit', ['id' => $contest->id]));
     }
 
     public function contestsUpdate(Request $request, $id)
@@ -285,6 +358,23 @@ class AdminController extends Controller
         }
 
         return null;
+    }
+
+    private function defaultContestDates(): array
+    {
+        $now = Carbon::now('Europe/Prague');
+        $contestStart = $now->copy()->startOfDay();
+        $contestEnd = $now->copy()->setTime(23, 59);
+        $submissionStart = $contestStart->copy();
+        // Conservative default: keep submissions open for a full week after the contest ends.
+        $submissionEnd = $contestEnd->copy()->addDays(7);
+
+        return [
+            'contest_start' => $contestStart->format('Y-m-d\\TH:i'),
+            'contest_end' => $contestEnd->format('Y-m-d\\TH:i'),
+            'submission_start' => $submissionStart->format('Y-m-d\\TH:i'),
+            'submission_end' => $submissionEnd->format('Y-m-d\\TH:i'),
+        ];
     }
 
     private function logAdminAction(?string $adminEmail, string $action, int $entityId, array $diff): void
