@@ -199,6 +199,27 @@ $router->get('/_debug/routes-auth', function () {
     return response()->json($matches, 200);
 });
 
+$router->get('/_debug/db-schema', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
+    }
+
+    try {
+        $columns = DB::select("SHOW COLUMNS FROM `user` LIKE 'email'");
+    } catch (\Throwable $e) {
+        $message = sprintf('%s in %s:%d', $e->getMessage(), $e->getFile(), $e->getLine());
+
+        return response()->json([
+            'error' => $message,
+        ], 500);
+    }
+
+    return response()->json($columns, 200);
+});
+
 $router->get('/diag', function () {
     $token = env('DIAG_TOKEN');
     $requestToken = request()->query('token');

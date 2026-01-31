@@ -3,7 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
-class MakeUserEmailNullable extends Migration
+class MakeUserEmailNullableAgain extends Migration
 {
     /**
      * Run the migrations.
