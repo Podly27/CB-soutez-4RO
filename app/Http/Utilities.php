@@ -74,6 +74,27 @@ class Utilities {
         return $contestsInProgress->where('name', $contestName)->first() ? '<i> (' . __('průběžné pořadí') . ')</i>' : '';
     }
 
+    public static function isAdmin(?string $userEmail): bool
+    {
+        if (! $userEmail) {
+            return false;
+        }
+
+        $adminEmails = env('ADMIN_EMAILS');
+        if (! $adminEmails) {
+            $adminEmails = env('ADMIN_EMAIL');
+        }
+
+        if (! is_string($adminEmails) || $adminEmails === '') {
+            return false;
+        }
+
+        $emails = array_filter(array_map('trim', explode(',', $adminEmails)));
+        $emails = array_map('strtolower', $emails);
+
+        return in_array(strtolower(trim($userEmail)), $emails, true);
+    }
+
     public static function submissionDeadline()
     {
         $deadline = Carbon::parse(Contest::submissionActiveOrdered()->min('submission_end'));

@@ -452,6 +452,44 @@ $router->get('/profile', [
     'uses' => 'PageController@profile',
 ]);
 
+// Admin
+$router->group([
+    'middleware' => 'admin',
+], function () use ($router) {
+    $router->get('/admin', [
+        'as' => 'adminDashboard',
+        'uses' => 'AdminController@dashboard',
+    ]);
+    $router->get('/admin/contests', [
+        'as' => 'adminContests',
+        'uses' => 'AdminController@contestsIndex',
+    ]);
+    $router->get('/admin/contests/{id}/edit', [
+        'as' => 'adminContestEdit',
+        'uses' => 'AdminController@contestsEdit',
+    ]);
+    $router->post('/admin/contests/{id}', [
+        'as' => 'adminContestUpdate',
+        'uses' => 'AdminController@contestsUpdate',
+    ]);
+    $router->get('/admin/diaries', [
+        'as' => 'adminDiaries',
+        'uses' => 'AdminController@diariesIndex',
+    ]);
+    $router->get('/admin/diaries/{id}/edit', [
+        'as' => 'adminDiaryEdit',
+        'uses' => 'AdminController@diariesEdit',
+    ]);
+    $router->post('/admin/diaries/{id}', [
+        'as' => 'adminDiaryUpdate',
+        'uses' => 'AdminController@diariesUpdate',
+    ]);
+    $router->post('/admin/diaries/{id}/delete', [
+        'as' => 'adminDiaryDelete',
+        'uses' => 'AdminController@diariesDelete',
+    ]);
+});
+
 // Results
 $router->get('/results', [
     'as' => 'results',

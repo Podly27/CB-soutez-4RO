@@ -86,9 +86,10 @@ $app->middleware([
     App\Http\Middleware\ClientLocale::class,
 ]);
 
-// $app->routeMiddleware([
-//     'auth' => App\Http\Middleware\Authenticate::class,
-// ]);
+$app->routeMiddleware([
+    'auth' => App\Http\Middleware\Authenticate::class,
+    'admin' => App\Http\Middleware\AdminOnly::class,
+]);
 
 /*
 |--------------------------------------------------------------------------

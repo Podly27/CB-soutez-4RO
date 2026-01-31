@@ -140,6 +140,11 @@
                         <li class="nav-item">
                             <a class="nav-link to-modal tm-text-gray" href="#" data-modal-id="profile" data-url="{{ route('profile') }}"><x-avatar/>{{ __('Můj profil') }}</a>
                         </li>
+                        @if (Utilities::isAdmin(Auth::user()->email ?? null))
+                        <li class="nav-item">
+                            <a class="nav-link tm-text-gray" href="{{ route('adminDashboard') }}">{{ __('Admin') }}</a>
+                        </li>
+                        @endif
                         <li class="nav-item">
                             <a class="nav-link tm-text-gray" href="{{ route('logout') }}">{{ __('Odhlásit se') }}</a>
                         </li>
