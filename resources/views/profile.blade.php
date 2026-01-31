@@ -10,6 +10,11 @@
                 @if (! request()->ajax())
                     <h2 class="mb-4"><x-avatar :small="false"/>{{ $title }}</h2>
                 @endif
+                @if (! Auth::user()->email)
+                    <div class="alert alert-warning">
+                        {{ __('Účet X neposkytl e-mail. Pokud chcete e-mail pro notifikace, doplňte jej v profilu.') }}
+                    </div>
+                @endif
                 <form>
                     <div class="row">
                         <div class="form-group col-12 col-lg-9">

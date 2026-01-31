@@ -134,7 +134,7 @@
                         <li class="nav-item">
                             <a class="nav-link tm-text-gray d-inline-block" href="{{ route('login', [ 'provider' => 'facebook' ]) }}"><i class="fa fa-facebook fa-2x"></i></a>
                             <a class="nav-link tm-text-gray d-inline-block ml-2" href="{{ route('login', [ 'provider' => 'google' ]) }}"><i class="fa fa-google fa-2x"></i></a>
-                            <a class="nav-link tm-text-gray d-inline-block ml-2" href="{{ route('login', [ 'provider' => 'twitter' ]) }}"><i class="fa fa-twitter fa-2x"></i></a>
+                            <a class="nav-link tm-text-gray d-inline-block ml-2" href="{{ route('login', [ 'provider' => 'twitter' ]) }}" title="{{ __('Přihlásit přes X') }}" aria-label="{{ __('Přihlásit přes X') }}"><i class="fa fa-x-twitter fa-2x"></i></a>
                         </li>
                         @elseif (Auth::user())
                         <li class="nav-item">
