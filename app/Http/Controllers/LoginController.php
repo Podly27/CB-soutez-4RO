@@ -11,6 +11,7 @@ use Laravel\Socialite\Facades\Socialite;
 use App\Exceptions\AppException;
 use App\Http\Utilities;
 use App\Models\User;
+use App\Models\UserProvider;
 
 class LoginController extends Controller
 {
@@ -246,24 +247,43 @@ class LoginController extends Controller
             return $this->handleOauthFailure($provider, $e);
         }
 
-        $authInfo = [ 'name' => $oauthUser->getName(), 'email' => $oauthUser->getEmail() ];
-        $user = User::where($authInfo)->first();
+        $providerUid = (string) $oauthUser->getId();
+        $email = $oauthUser->getEmail() ?: null;
+        $displayName = $oauthUser->getName() ?: $oauthUser->getNickname() ?: $providerUid;
+        $nickname = $oauthUser->getNickname();
+
+        $providerMatch = UserProvider::where('provider', $provider)
+            ->where('provider_uid', $providerUid)
+            ->first();
+
+        $user = $providerMatch ? $providerMatch->user : null;
+        if (! $user && $email) {
+            $user = User::where('email', $email)->first();
+        }
+
         if (! $user) {
+            $authInfo = [ 'name' => $displayName, 'email' => $email ];
             Log::info('Create new account for:', [ var_export($authInfo, true) ]);
-            $user = User::create([
-                'name' => $oauthUser->getName(),
-                'email' => $oauthUser->getEmail()
-            ]);
+            $userData = [
+                'name' => $displayName,
+                'email' => $email,
+            ];
+            if ($nickname && ! User::where('nickname', $nickname)->exists()) {
+                $userData['nickname'] = $nickname;
+            }
+            $user = User::create($userData);
             $user->save();
         }
+
         $user->providers()->updateOrCreate([
             'provider' => $provider,
+            'provider_uid' => $providerUid,
         ], [
-            'provider_uid' => $oauthUser->getId(),
             'avatar_url' => $oauthUser->getAvatar(),
         ]);
         $user->save();
 
+        $authInfo = [ 'name' => $user->name, 'email' => $user->email ];
         Auth::login($user);
         Log::info('Login successful for:', [ var_export($authInfo, true) ]);
         Session::flash('successes', array(__('Přihlášení proběhlo úspěšně.')));
