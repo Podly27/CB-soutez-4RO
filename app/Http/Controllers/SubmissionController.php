@@ -78,19 +78,20 @@ class SubmissionController extends Controller
             throw new \RuntimeException('Failed to load CBPMR.info share page.');
         }
 
+        $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
         $finalUrl = NULL;
         if (isset($http_response_header)) {
             foreach ($http_response_header as $header) {
                 if (preg_match('|^Location: /share/[^/]+/\d+|', $header)) {
                     $diaryId = trim(preg_replace('|.*/share/[^/]+/(\d+).*|', '$1', $header));
-                    $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $diaryId;
+                    $finalUrl = $apiBaseUrl . $diaryId;
                     break;
                 }
             }
         }
 
         if ($finalUrl === NULL && preg_match('|/share/[^/]+/(\d+)|', $html, $matches)) {
-            $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $matches[1];
+            $finalUrl = $apiBaseUrl . $matches[1];
         }
 
         $shareToken = NULL;
@@ -98,7 +99,7 @@ class SubmissionController extends Controller
             $shareToken = $matches[1];
         }
         if ($finalUrl === NULL && $shareToken) {
-            $finalUrl = Str::finish(config('ctvero.cbpmrInfoApiUrl'), '/') . $shareToken;
+            $finalUrl = $apiBaseUrl . $shareToken;
         }
 
         if ($finalUrl === NULL) {
@@ -115,6 +116,21 @@ class SubmissionController extends Controller
         $this->qthName = $data->place;
         $this->qthLocator = $data->locator;
         $this->qsoCount = $data->totalCalls;
+    }
+
+    private function resolveCbpmrInfoApiBaseUrl(): string
+    {
+        $apiUrl = trim((string) config('ctvero.cbpmrInfoApiUrl'));
+        if ($apiUrl === '') {
+            throw new \RuntimeException('Failed to resolve CBPMR.info API URL.');
+        }
+
+        $apiUrl = preg_replace('|^http:|', 'https:', $apiUrl);
+        if (! Str::contains($apiUrl, '/api/') && Str::contains($apiUrl, '/share/')) {
+            $apiUrl = preg_replace('#/share/?#', '/api/share/', $apiUrl, 1);
+        }
+
+        return Str::finish($apiUrl, '/');
     }
 
     public function show(Request $request, $resetStep = false)
