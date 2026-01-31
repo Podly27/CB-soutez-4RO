@@ -33,18 +33,34 @@ html {
     color: rgba(0, 0, 0, 0.9)
 }
 
-.social-icon {
+.social-btn {
     display: inline-flex;
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    vertical-align: middle;
     align-items: center;
     justify-content: center;
+    text-decoration: none;
+}
+
+.social-btn + .social-btn {
+    margin-left: 0.5rem;
+}
+
+.social-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    object-fit: contain;
+    vertical-align: middle;
     font-weight: 700;
-    font-size: 18px;
+    font-size: 2em;
     line-height: 1;
     color: inherit;
+}
+
+.social-icon .fa {
+    font-size: 1em;
+    line-height: 1;
 }
 
 .list-group-item.highlight-contest {

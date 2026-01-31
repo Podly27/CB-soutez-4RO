@@ -132,9 +132,15 @@
                             {{ __('Přihlásit se přes…') }}
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link tm-text-gray d-inline-block" href="{{ route('login', [ 'provider' => 'facebook' ]) }}"><i class="fa fa-facebook fa-2x"></i></a>
-                            <a class="nav-link tm-text-gray d-inline-block ml-2" href="{{ route('login', [ 'provider' => 'google' ]) }}"><i class="fa fa-google fa-2x"></i></a>
-                            <a class="nav-link tm-text-gray d-inline-block ml-2" href="{{ route('login', [ 'provider' => 'twitter' ]) }}" title="{{ __('Přihlásit přes X') }}" aria-label="{{ __('Přihlásit přes X') }}"><span class="social-icon social-icon-x" aria-hidden="true">X</span></a>
+                            <a class="nav-link tm-text-gray d-inline-block social-btn" href="{{ route('login', [ 'provider' => 'facebook' ]) }}" title="{{ __('Přihlásit přes Facebook') }}" aria-label="{{ __('Přihlásit přes Facebook') }}">
+                                <span class="social-icon" aria-hidden="true"><i class="fa fa-facebook" aria-hidden="true"></i></span>
+                            </a>
+                            <a class="nav-link tm-text-gray d-inline-block social-btn" href="{{ route('login', [ 'provider' => 'google' ]) }}" title="{{ __('Přihlásit přes Google') }}" aria-label="{{ __('Přihlásit přes Google') }}">
+                                <span class="social-icon" aria-hidden="true"><i class="fa fa-google" aria-hidden="true"></i></span>
+                            </a>
+                            <a class="nav-link tm-text-gray d-inline-block social-btn" href="{{ route('login', [ 'provider' => 'twitter' ]) }}" title="{{ __('Přihlásit přes X') }}" aria-label="{{ __('Přihlásit přes X') }}">
+                                <span class="social-icon social-icon-x" aria-hidden="true">X</span>
+                            </a>
                         </li>
                         @elseif (Auth::user())
                         <li class="nav-item">
