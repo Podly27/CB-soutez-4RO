@@ -464,6 +464,14 @@ $router->group([
         'as' => 'adminContests',
         'uses' => 'AdminController@contestsIndex',
     ]);
+    $router->get('/admin/contests/create', [
+        'as' => 'adminContestCreate',
+        'uses' => 'AdminController@contestsCreate',
+    ]);
+    $router->post('/admin/contests', [
+        'as' => 'adminContestStore',
+        'uses' => 'AdminController@contestsStore',
+    ]);
     $router->get('/admin/contests/{id}/edit', [
         'as' => 'adminContestEdit',
         'uses' => 'AdminController@contestsEdit',

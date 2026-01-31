@@ -8,6 +8,9 @@
             <div class="col-12">
                 <h2>{{ __('Soutěže') }}</h2>
                 <p class="mb-3"><a href="{{ route('adminDashboard') }}">{{ __('Zpět na dashboard') }}</a></p>
+                <p class="mb-3">
+                    <a class="btn btn-primary" href="{{ route('adminContestCreate') }}">{{ __('Nové kolo') }}</a>
+                </p>
                 <div class="table-responsive">
                     <table class="table table-striped table-sm">
                         <thead>
