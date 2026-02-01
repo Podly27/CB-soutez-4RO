@@ -160,39 +160,31 @@ class DebugCbpmrController extends Controller
         }
     }
 
-    public function parse(Request $request)
+    public function parse(\Laravel\Lumen\Http\Request $request)
     {
+        if ((string) $request->query('_enter') === '1') {
+            return response()->json(['ok' => true, 'stage' => 'entered2', 'qs' => $request->query()], 200);
+        }
+
+        $serverToken = env('DIAG_TOKEN');
+        $reqToken = (string) $request->query('token', '');
+        if (! $serverToken || ! $reqToken || ! hash_equals($serverToken, $reqToken)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'forbidden',
+                'stage' => 'validate',
+                'server_set' => (bool) $serverToken,
+                'server_len' => strlen((string) $serverToken),
+                'req_len' => strlen($reqToken),
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
+
         $stage = 'start';
 
         try {
             header('Content-Type: application/json; charset=utf-8');
             ini_set('display_errors', '0');
             error_reporting(E_ALL & ~E_DEPRECATED);
-
-            if ((string) $request->query('debug') === '1') {
-                return response()->json([
-                    'ok' => true,
-                    'stage' => 'entered',
-                    'qs' => $request->query(),
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
-
-            $serverToken = env('DIAG_TOKEN');
-            $reqToken = (string) $request->query('token', '');
-
-            $stage = 'validate';
-            if (! $serverToken || ! hash_equals((string) $serverToken, $reqToken)) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'forbidden',
-                    'stage' => 'validate',
-                    'server_token_set' => (bool) $serverToken,
-                    'server_len' => strlen((string) $serverToken),
-                    'req_len' => strlen($reqToken),
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
-
-            $stage = 'validate_ok';
 
             $url = $request->query('url');
             if (! is_string($url) || trim($url) === '') {

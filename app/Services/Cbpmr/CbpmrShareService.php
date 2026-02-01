@@ -12,6 +12,10 @@ use DOMXPath;
 
 class CbpmrShareService
 {
+    public function __construct()
+    {
+    }
+
     public function fetch(string $url): array
     {
         /** @var CbpmrShareFetcher $fetcher */
