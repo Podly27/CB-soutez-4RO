@@ -162,6 +162,13 @@ class DebugCbpmrController extends Controller
 
     public function parse(\Laravel\Lumen\Http\Request $request)
     {
+        if (($_GET['debug'] ?? null) === '1') {
+            return response()->json([
+                'ok' => true,
+                'stage' => 'entered',
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
+
         if (($_GET['_enter'] ?? null) === '1') {
             $serverToken = env('DIAG_TOKEN');
             $reqToken = (string) ($_GET['token'] ?? '');
@@ -199,45 +206,47 @@ class DebugCbpmrController extends Controller
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
 
-        if (! is_string($url) || trim($url) === '') {
-            return response()->json([
-                'ok' => false,
-                'error' => 'missing_url',
-                'stage' => 'validate',
-                'raw_qs' => $rawQs,
-                'get_keys' => $getKeys,
-            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-        }
-
-        $parsed = parse_url($url);
-        $hostSeen = is_array($parsed) ? ($parsed['host'] ?? null) : null;
-        $host = is_string($hostSeen) ? strtolower($hostSeen) : '';
-        if ($host !== '' && Str::startsWith($host, 'www.')) {
-            $host = substr($host, 4);
-        }
-        if ($host === '') {
-            return response()->json([
-                'ok' => false,
-                'error' => 'invalid_url',
-                'stage' => 'validate',
-            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-        }
-
-        $allowedHosts = ['cbpmr.info'];
-        if (! in_array($host, $allowedHosts, true)) {
-            return response()->json([
-                'ok' => false,
-                'error' => 'invalid_host',
-                'stage' => 'validate',
-                'host_seen' => $hostSeen,
-                'url_seen' => $url,
-            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-        }
-
         try {
             header('Content-Type: application/json; charset=utf-8');
             ini_set('display_errors', '0');
             error_reporting(E_ALL & ~E_DEPRECATED);
+
+            $stage = 'validate_url';
+            if (! is_string($url) || trim($url) === '') {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'missing_url',
+                    'stage' => $stage,
+                    'raw_qs' => $rawQs,
+                    'get_keys' => $getKeys,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $parsed = parse_url($url);
+            $hostSeen = is_array($parsed) ? ($parsed['host'] ?? null) : null;
+            $host = is_string($hostSeen) ? strtolower($hostSeen) : '';
+            if ($host !== '' && Str::startsWith($host, 'www.')) {
+                $host = substr($host, 4);
+            }
+            if ($host === '') {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'invalid_url',
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'validate_host';
+            $allowedHosts = ['cbpmr.info'];
+            if (! in_array($host, $allowedHosts, true)) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'invalid_host',
+                    'stage' => $stage,
+                    'host_seen' => $hostSeen,
+                    'url_seen' => $url,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
 
             $stage = 'resolve_service';
             /** @var CbpmrShareService $service */
@@ -251,20 +260,7 @@ class DebugCbpmrController extends Controller
             }
 
             if (! ($fetchResult['ok'] ?? false)) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'fetch_failed',
-                    'message' => $fetchResult['error'] ?? 'Fetch failed.',
-                    'code' => $fetchResult['code'] ?? null,
-                    'final_url' => $fetchResult['final_url'] ?? $url,
-                    'http_code' => $fetchResult['http_code'] ?? null,
-                    'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
-                    'content_type' => $fetchResult['content_type'] ?? null,
-                    'body_len' => $fetchResult['body_len'] ?? null,
-                    'title_snippet' => $fetchResult['title_snippet'] ?? null,
-                    'body_snippet' => $bodySnippet,
-                    'stage' => $stage,
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+                throw new \RuntimeException($fetchResult['error'] ?? 'Fetch failed.');
             }
 
             $finalUrl = $fetchResult['final_url'] ?? $url;
@@ -286,6 +282,14 @@ class DebugCbpmrController extends Controller
 
             $stage = 'parse';
             $payload = $service->parsePortable((string) ($fetchResult['body'] ?? ''), $finalUrl);
+            if (($payload['rows_found'] ?? 0) === 0) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'no_rows_found',
+                    'stage' => $stage,
+                    'final_url' => $finalUrl,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
 
             $stage = 'return_ok';
             return response()->json([
@@ -309,18 +313,21 @@ class DebugCbpmrController extends Controller
         } catch (\Throwable $e) {
             $logPath = storage_path('logs/last_exception.txt');
             $urlParam = $_GET['url'] ?? null;
-            $trace = Str::limit($e->getTraceAsString(), 2000, "\n...truncated...");
+            $parsed = is_string($urlParam) ? parse_url($urlParam) : null;
+            $hostSeen = is_array($parsed) ? ($parsed['host'] ?? null) : null;
+            $traceLines = explode("\n", $e->getTraceAsString());
+            $traceSnippet = implode("\n", array_slice($traceLines, 0, 20));
             $logMessage = implode("\n", [
                 '[' . now()->toDateTimeString() . '] cbpmr-parse exception',
                 'stage: ' . $stage,
+                'url: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
+                'host_seen: ' . (is_string($hostSeen) ? $hostSeen : json_encode($hostSeen)),
                 'message: ' . $e->getMessage(),
                 'location: ' . $e->getFile() . ':' . $e->getLine(),
-                'url_param: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
                 'trace:',
-                $trace,
+                $traceSnippet,
                 '',
             ]);
-            $logMessage = Str::limit($logMessage, 4000, "\n...truncated...");
             @file_put_contents($logPath, $logMessage, FILE_APPEND);
 
             return response()->json([
