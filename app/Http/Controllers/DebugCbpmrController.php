@@ -149,7 +149,7 @@ class DebugCbpmrController extends Controller
         }
     }
 
-    public function parse(Request $request)
+    public function parse(Request $request, CbpmrShareService $service)
     {
         header('Content-Type: application/json; charset=utf-8');
         ini_set('display_errors', '0');
@@ -167,6 +167,9 @@ class DebugCbpmrController extends Controller
                     'ok' => false,
                     'error' => 'forbidden',
                     'stage' => 'validate',
+                    'server_token_set' => (bool) $serverToken,
+                    'server_len' => strlen((string) $serverToken),
+                    'req_len' => strlen($reqToken),
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
@@ -184,10 +187,9 @@ class DebugCbpmrController extends Controller
             $stage = 'parse_url';
             $parsed = parse_url($url);
             $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
-            $path = is_array($parsed) ? ($parsed['path'] ?? '') : '';
 
             $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
-            if (! in_array($host, $allowedHosts, true) || ! Str::startsWith($path, '/share/')) {
+            if (! in_array($host, $allowedHosts, true)) {
                 return response()->json([
                     'ok' => false,
                     'error' => 'invalid_host',
@@ -196,17 +198,25 @@ class DebugCbpmrController extends Controller
             }
 
             $stage = 'fetch';
-            $fetchResult = $this->fetchCbpmr($url);
+            $fetchResult = $service->fetch($url);
+            $bodySnippet = null;
+            if (is_string($fetchResult['body'] ?? null)) {
+                $bodySnippet = trim(mb_substr($fetchResult['body'], 0, 500, 'UTF-8'));
+            }
 
-            if (! $fetchResult['ok']) {
+            if (! ($fetchResult['ok'] ?? false)) {
                 return response()->json([
                     'ok' => false,
                     'error' => 'fetch_failed',
                     'message' => $fetchResult['error'] ?? 'Fetch failed.',
                     'code' => $fetchResult['code'] ?? null,
-                    'url' => $fetchResult['url'] ?? $url,
-                    'http_status' => $fetchResult['http_code'] ?? null,
+                    'final_url' => $fetchResult['final_url'] ?? $url,
+                    'http_code' => $fetchResult['http_code'] ?? null,
                     'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
+                    'content_type' => $fetchResult['content_type'] ?? null,
+                    'body_len' => $fetchResult['body_len'] ?? null,
+                    'title_snippet' => $fetchResult['title_snippet'] ?? null,
+                    'body_snippet' => $bodySnippet,
                     'stage' => $stage,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
@@ -214,78 +224,41 @@ class DebugCbpmrController extends Controller
             $finalUrl = $fetchResult['final_url'] ?? $url;
             $httpCode = $fetchResult['http_code'] ?? null;
             if ($httpCode !== null && (int) $httpCode !== 200) {
-                $snippet = trim(mb_substr($fetchResult['body'] ?? '', 0, 500, 'UTF-8'));
                 return response()->json([
                     'ok' => false,
                     'error' => 'http_error',
                     'http_code' => (int) $httpCode,
                     'final_url' => $finalUrl,
                     'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
-                    'response_snippet' => $snippet,
+                    'content_type' => $fetchResult['content_type'] ?? null,
+                    'body_len' => $fetchResult['body_len'] ?? null,
+                    'title_snippet' => $fetchResult['title_snippet'] ?? null,
+                    'body_snippet' => $bodySnippet,
                     'stage' => $stage,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
-            if (Str::contains($finalUrl, '/share/error')) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'share_error',
-                    'reason' => 'final_url_share_error',
-                    'final_url' => $finalUrl,
-                    'stage' => $stage,
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
-            if (! Str::contains($finalUrl, '/share/portable/')) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'not_portable',
-                    'reason' => 'final_url_not_portable',
-                    'final_url' => $finalUrl,
-                    'stage' => $stage,
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
-
-            $stage = 'parse_dom';
-            /** @var CbpmrShareService $service */
-            $service = app(CbpmrShareService::class);
-            $payload = $service->parsePortableHtml((string) ($fetchResult['body'] ?? ''), $finalUrl);
-            $rowsFound = $payload['rows_found'] ?? 0;
-
-            if ($rowsFound === 0) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'no_rows_found',
-                    'stage' => $stage,
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
-
-            $stage = 'parse_rows';
-            $firstRows = [];
-            foreach (array_slice($payload['entries'] ?? [], 0, 3) as $entry) {
-                $rowData = [
-                    'time' => $entry['time'] ?? null,
-                    'name' => $entry['name'] ?? null,
-                    'locator' => $entry['locator'] ?? null,
-                    'km' => $entry['km_int'] ?? null,
-                ];
-                if (! empty($entry['note'])) {
-                    $rowData['note'] = $entry['note'];
-                }
-                $firstRows[] = $rowData;
-            }
+            $stage = 'parse';
+            $payload = $service->parsePortable((string) ($fetchResult['body'] ?? ''), $finalUrl);
 
             $stage = 'return_ok';
             return response()->json([
                 'ok' => true,
                 'stage' => $stage,
                 'final_url' => $finalUrl,
+                'http_code' => $fetchResult['http_code'] ?? null,
+                'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
+                'content_type' => $fetchResult['content_type'] ?? null,
+                'body_len' => $fetchResult['body_len'] ?? null,
+                'title_snippet' => $fetchResult['title_snippet'] ?? null,
+                'body_snippet' => $bodySnippet,
                 'portable_id' => $payload['portable_id'] ?? null,
                 'my_locator' => $payload['my_locator'] ?? null,
                 'place' => $payload['place'] ?? null,
                 'qso_count_header' => $payload['qso_count_header'] ?? null,
                 'total_km' => $payload['total_km'] ?? null,
                 'rows_found' => $payload['rows_found'] ?? null,
-                'first_rows' => $firstRows,
+                'first_rows' => $payload['first_rows'] ?? null,
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         } catch (\Throwable $e) {
             $logPath = storage_path('logs/last_exception.txt');

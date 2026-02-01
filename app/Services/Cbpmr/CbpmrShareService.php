@@ -12,18 +12,70 @@ use DOMXPath;
 
 class CbpmrShareService
 {
-    public function fetchHtml(string $url): array
+    public function fetch(string $url): array
     {
         /** @var CbpmrShareFetcher $fetcher */
         $fetcher = app(CbpmrShareFetcher::class);
         $fetchResult = $fetcher->fetch($url, ['use_cookies' => true]);
 
+        $body = $fetchResult['body'] ?? null;
+        $titleSnippet = null;
+        if (is_string($body) && $body !== '') {
+            $titleSnippet = $this->extractTitleSnippet($body);
+        }
+
+        return [
+            'ok' => $fetchResult['ok'] ?? false,
+            'error' => $fetchResult['error'] ?? null,
+            'code' => $fetchResult['code'] ?? null,
+            'http_code' => $fetchResult['http_status'] ?? null,
+            'final_url' => $fetchResult['final_url'] ?? $url,
+            'redirect_chain' => $fetchResult['redirect_chain'] ?? [],
+            'content_type' => $fetchResult['content_type'] ?? null,
+            'body' => $body,
+            'title_snippet' => $titleSnippet,
+            'body_len' => is_string($body) ? strlen($body) : 0,
+        ];
+    }
+
+    public function parsePortable(string $html, string $finalUrl): array
+    {
+        $payload = $this->buildPortablePayload($html, $finalUrl);
+        $firstRows = [];
+        foreach (array_slice($payload['entries'], 0, 3) as $entry) {
+            $row = [
+                'time' => $entry['time'] ?? null,
+                'name' => $entry['name'] ?? null,
+                'locator' => $entry['locator'] ?? null,
+                'km' => $entry['km_int'] ?? null,
+            ];
+            if (! empty($entry['note'])) {
+                $row['note'] = $entry['note'];
+            }
+            $firstRows[] = $row;
+        }
+
+        return [
+            'portable_id' => $payload['portable_id'],
+            'my_locator' => $payload['my_locator'],
+            'place' => $payload['place'],
+            'qso_count_header' => $payload['qso_count_header'],
+            'total_km' => $payload['total_km'],
+            'rows_found' => $payload['rows_found'],
+            'first_rows' => $firstRows,
+        ];
+    }
+
+    public function fetchHtml(string $url): array
+    {
+        $fetchResult = $this->fetch($url);
+
         if (! $fetchResult['ok']) {
             return [
                 'ok' => false,
                 'error' => $fetchResult['error'] ?? 'Fetch failed.',
-                'http_code' => $fetchResult['http_status'] ?? null,
-                'final_url' => $fetchResult['url'] ?? $url,
+                'http_code' => $fetchResult['http_code'] ?? null,
+                'final_url' => $fetchResult['final_url'] ?? $url,
                 'redirect_chain' => $fetchResult['redirect_chain'] ?? [],
                 'content_type' => $fetchResult['content_type'] ?? null,
                 'body' => null,
@@ -32,7 +84,7 @@ class CbpmrShareService
 
         return [
             'ok' => true,
-            'http_code' => $fetchResult['http_status'] ?? null,
+            'http_code' => $fetchResult['http_code'] ?? null,
             'final_url' => $fetchResult['final_url'] ?? $url,
             'redirect_chain' => $fetchResult['redirect_chain'] ?? [],
             'content_type' => $fetchResult['content_type'] ?? null,
@@ -41,6 +93,61 @@ class CbpmrShareService
     }
 
     public function parsePortableHtml(string $html, string $finalUrl): array
+    {
+        return $this->buildPortablePayload($html, $finalUrl);
+    }
+
+    private function createXPath(string $html): DOMXPath
+    {
+        libxml_use_internal_errors(true);
+        $dom = new DOMDocument();
+        $dom->loadHTML('<meta charset="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+        libxml_clear_errors();
+
+        return new DOMXPath($dom);
+    }
+
+    private function textFromXPath(DOMXPath $xpath, string $query, ?DOMElement $contextNode = null): ?string
+    {
+        $nodes = $contextNode ? $xpath->query($query, $contextNode) : $xpath->query($query);
+        $node = $nodes instanceof DOMNodeList ? $nodes->item(0) : null;
+        if (! $node instanceof DOMNode) {
+            return null;
+        }
+
+        return $node->textContent;
+    }
+
+    private function normalizeText(?string $value): string
+    {
+        $value = preg_replace('/\s+/u', ' ', $value ?? '');
+        return trim($value);
+    }
+
+    private function extractInt(?string $value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (preg_match('/(\d+)/', $value, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    private function extractPortableId(string $finalUrl): ?string
+    {
+        $path = parse_url($finalUrl, PHP_URL_PATH) ?? '';
+        if (preg_match('|/share/portable/(\\d+)|', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    private function buildPortablePayload(string $html, string $finalUrl): array
     {
         $xpath = $this->createXPath($html);
 
@@ -98,56 +205,17 @@ class CbpmrShareService
         ];
     }
 
-    private function createXPath(string $html): DOMXPath
+    private function extractTitleSnippet(string $html): ?string
     {
-        $html = preg_replace('/<meta charset="[^"]+">/i', '<meta charset="UTF-8">', $html);
-        $html = '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' . $html;
-
-        libxml_use_internal_errors(true);
-        $dom = new DOMDocument();
-        $dom->loadHTML($html, LIBXML_NOWARNING | LIBXML_NOERROR);
-        libxml_clear_errors();
-
-        return new DOMXPath($dom);
-    }
-
-    private function textFromXPath(DOMXPath $xpath, string $query, ?DOMElement $contextNode = null): ?string
-    {
-        $nodes = $contextNode ? $xpath->query($query, $contextNode) : $xpath->query($query);
-        $node = $nodes instanceof DOMNodeList ? $nodes->item(0) : null;
-        if (! $node instanceof DOMNode) {
+        if (! preg_match('/<title[^>]*>(.*?)<\\/title>/is', $html, $matches)) {
             return null;
         }
 
-        return $node->textContent;
-    }
-
-    private function normalizeText(?string $value): string
-    {
-        $value = preg_replace('/\s+/u', ' ', $value ?? '');
-        return trim($value);
-    }
-
-    private function extractInt(?string $value): ?int
-    {
-        if ($value === null) {
+        $title = $this->normalizeText(strip_tags($matches[1]));
+        if ($title === '') {
             return null;
         }
 
-        if (preg_match('/(\d+)/', $value, $matches)) {
-            return (int) $matches[1];
-        }
-
-        return null;
-    }
-
-    private function extractPortableId(string $finalUrl): ?string
-    {
-        $path = parse_url($finalUrl, PHP_URL_PATH) ?? '';
-        if (preg_match('|/share/portable/(\\d+)|', $path, $matches)) {
-            return $matches[1];
-        }
-
-        return null;
+        return mb_substr($title, 0, 120, 'UTF-8');
     }
 }
