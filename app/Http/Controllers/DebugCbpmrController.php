@@ -17,18 +17,15 @@ class DebugCbpmrController extends Controller
         $stage = 'start';
 
         try {
-            $serverToken = env('DIAG_TOKEN') ?: env('DIAGTOKEN') ?: env('DIAG_SECRET') ?: env('DEBUG_TOKEN');
+            $serverToken = env('DIAG_TOKEN');
             $reqToken = (string) $request->query('token', '');
 
+            $stage = 'validate';
             if (! $serverToken || ! hash_equals((string) $serverToken, $reqToken)) {
                 return response()->json([
                     'ok' => false,
                     'error' => 'forbidden',
-                    'stage' => $stage,
-                    'server_token_set' => (bool) $serverToken,
-                    'server_token_len' => strlen((string) $serverToken),
-                    'req_token_len' => strlen($reqToken),
-                    'req_has_url' => (bool) $request->query('url'),
+                    'stage' => 'validate',
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
@@ -57,11 +54,9 @@ class DebugCbpmrController extends Controller
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
-            $stage = 'http_fetch';
-            /** @var CbpmrShareFetcher $fetcher */
-            $fetcher = app(CbpmrShareFetcher::class);
             $useCookies = $request->boolean('use_cookies', true);
-            $fetchResult = $fetcher->fetch($url, ['use_cookies' => $useCookies]);
+            $stage = 'fetch';
+            $fetchResult = $this->fetchCbpmr($url, $useCookies);
 
             if (! $fetchResult['ok']) {
                 return response()->json([
@@ -70,7 +65,7 @@ class DebugCbpmrController extends Controller
                     'message' => $fetchResult['error'] ?? 'Fetch failed.',
                     'code' => $fetchResult['code'] ?? null,
                     'url' => $fetchResult['url'] ?? $url,
-                    'http_status' => $fetchResult['http_status'] ?? null,
+                    'http_status' => $fetchResult['http_code'] ?? null,
                     'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
                     'stage' => $stage,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
@@ -79,7 +74,7 @@ class DebugCbpmrController extends Controller
             $body = $fetchResult['body'] ?? '';
             $bodyLength = strlen($body);
             $snippet = trim(mb_substr($body, 0, 1000, 'UTF-8'));
-            $httpStatus = $fetchResult['http_status'] ?? null;
+            $httpStatus = $fetchResult['http_code'] ?? null;
 
             if (is_numeric($httpStatus) && (int) $httpStatus >= 400) {
                 $errorSnippet = trim(mb_substr($body, 0, 500, 'UTF-8'));
@@ -148,18 +143,15 @@ class DebugCbpmrController extends Controller
         $stage = 'start';
 
         try {
-            $serverToken = env('DIAG_TOKEN') ?: env('DIAGTOKEN') ?: env('DIAG_SECRET') ?: env('DEBUG_TOKEN');
+            $serverToken = env('DIAG_TOKEN');
             $reqToken = (string) $request->query('token', '');
 
+            $stage = 'validate';
             if (! $serverToken || ! hash_equals((string) $serverToken, $reqToken)) {
                 return response()->json([
                     'ok' => false,
                     'error' => 'forbidden',
-                    'stage' => $stage,
-                    'server_token_set' => (bool) $serverToken,
-                    'server_token_len' => strlen((string) $serverToken),
-                    'req_token_len' => strlen($reqToken),
-                    'req_has_url' => (bool) $request->query('url'),
+                    'stage' => 'validate',
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
@@ -188,10 +180,8 @@ class DebugCbpmrController extends Controller
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
-            $stage = 'http_fetch';
-            /** @var CbpmrShareFetcher $fetcher */
-            $fetcher = app(CbpmrShareFetcher::class);
-            $fetchResult = $fetcher->fetch($url, ['use_cookies' => true]);
+            $stage = 'fetch';
+            $fetchResult = $this->fetchCbpmr($url);
 
             if (! $fetchResult['ok']) {
                 return response()->json([
@@ -200,19 +190,94 @@ class DebugCbpmrController extends Controller
                     'message' => $fetchResult['error'] ?? 'Fetch failed.',
                     'code' => $fetchResult['code'] ?? null,
                     'url' => $fetchResult['url'] ?? $url,
-                    'http_status' => $fetchResult['http_status'] ?? null,
+                    'http_status' => $fetchResult['http_code'] ?? null,
                     'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
                     'stage' => $stage,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
-            $stage = 'parse_html';
-            /** @var CbpmrShareParser $parser */
-            $parser = app(CbpmrShareParser::class);
-            $parsedResult = $parser->parsePortable($fetchResult['body'] ?? '');
-            $entries = $parsedResult['entries'] ?? [];
-            $firstRows = array_slice($entries, 0, 3);
             $finalUrl = $fetchResult['final_url'] ?? $url;
+            $httpCode = $fetchResult['http_code'] ?? null;
+            if ($httpCode !== null && (int) $httpCode !== 200) {
+                $snippet = trim(mb_substr($fetchResult['body'] ?? '', 0, 500, 'UTF-8'));
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'http_error',
+                    'http_code' => (int) $httpCode,
+                    'final_url' => $finalUrl,
+                    'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
+                    'response_snippet' => $snippet,
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            if (! Str::contains($finalUrl, '/share/portable/')) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'not_portable',
+                    'final_url' => $finalUrl,
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'parse_dom';
+            $html = (string) ($fetchResult['body'] ?? '');
+            $hasMetaCharset = preg_match('/<meta[^>]+charset=/i', $html) === 1;
+            if (! $hasMetaCharset || ! mb_check_encoding($html, 'UTF-8')) {
+                $html = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
+            }
+
+            libxml_use_internal_errors(true);
+            $dom = new \DOMDocument();
+            $dom->loadHTML($html);
+            $xpath = new \DOMXPath($dom);
+
+            $myLocator = trim((string) $xpath->evaluate('string(//*[@id="locator"])'));
+            $place = trim((string) $xpath->evaluate('string(//*[@id="place"])'));
+            $qsoCountHeader = trim((string) $xpath->evaluate('string(//*[@id="distance"])'));
+            $totalKm = trim((string) $xpath->evaluate('string(//*[@id="km"])'));
+            $rows = $xpath->query('//table[@id="myTable"]//tbody//tr');
+            $rowsFound = $rows ? $rows->length : 0;
+
+            if ($rowsFound === 0) {
+                $titleSnippet = trim((string) $xpath->evaluate('string(//title)'));
+                $htmlSnippet = trim(mb_substr($html, 0, 600, 'UTF-8'));
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'no_rows_found',
+                    'title_snippet' => $titleSnippet,
+                    'html_snippet' => $htmlSnippet,
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'parse_rows';
+            $firstRows = [];
+            $maxRows = min(3, $rowsFound);
+            for ($i = 0; $i < $maxRows; $i++) {
+                $row = $rows->item($i);
+                if (! $row) {
+                    continue;
+                }
+                $rowXpath = new \DOMXPath($row->ownerDocument);
+                $time = trim((string) $rowXpath->evaluate('string(./td[2]//text())', $row));
+                $name = trim((string) $rowXpath->evaluate('string(.//span[contains(@class,"duplicity-name")]//text())', $row));
+                $locator = trim((string) $rowXpath->evaluate('string(.//span[contains(@class,"font-caption-locator-small")]//text())', $row));
+                $km = trim((string) $rowXpath->evaluate('string(.//p[contains(@class,"span-km")]//text())', $row));
+                $note = trim((string) $rowXpath->evaluate('normalize-space(./td[3]//span[contains(@class,"font-ariel")][last()]//text())', $row));
+
+                $rowData = [
+                    'time' => $time,
+                    'name' => $name,
+                    'locator' => $locator,
+                    'km' => $km,
+                ];
+                if ($note !== '') {
+                    $rowData['note'] = $note;
+                }
+                $firstRows[] = $rowData;
+            }
+
             $finalPath = parse_url($finalUrl, PHP_URL_PATH) ?? '';
             $portableId = null;
             if (preg_match('|/share/portable/(\\d+)|', $finalPath, $matches)) {
@@ -225,9 +290,11 @@ class DebugCbpmrController extends Controller
                 'stage' => $stage,
                 'final_url' => $finalUrl,
                 'portable_id' => $portableId,
-                'my_locator' => $parsedResult['my_locator'] ?? null,
-                'qso_count' => $parsedResult['qso_count'] ?? null,
-                'total_km' => $parsedResult['total_km'] ?? null,
+                'my_locator' => $myLocator,
+                'place' => $place,
+                'qso_count_header' => $qsoCountHeader,
+                'total_km' => $totalKm,
+                'rows_found' => $rowsFound,
                 'first_rows' => $firstRows,
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         } catch (\Throwable $e) {
@@ -256,5 +323,20 @@ class DebugCbpmrController extends Controller
                 'location' => $e->getFile() . ':' . $e->getLine(),
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
+    }
+
+    private function fetchCbpmr(string $url, bool $useCookies = true): array
+    {
+        /** @var CbpmrShareFetcher $fetcher */
+        $fetcher = app(CbpmrShareFetcher::class);
+        $fetchResult = $fetcher->fetch($url, ['use_cookies' => $useCookies]);
+
+        if (! $fetchResult['ok']) {
+            return $fetchResult;
+        }
+
+        return array_merge($fetchResult, [
+            'http_code' => $fetchResult['http_status'] ?? null,
+        ]);
     }
 }
