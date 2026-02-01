@@ -146,8 +146,63 @@ $router->get('/_debug/response', function () {
     return response()->json(['ok' => true], 200);
 });
 
+$router->get('/_debug/ping-json', function () {
+    return response()->json([
+        'ok' => true,
+        'ts' => date('c'),
+    ], 200);
+});
+
+$router->get('/_debug/trace', 'DebugCbpmrController@trace');
 $router->get('/_debug/cbpmr-fetch', 'DebugCbpmrController@fetch');
 $router->get('/_debug/cbpmr-parse', 'DebugCbpmrController@parse');
+
+$router->get('/_debug/routes', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        abort(404);
+    }
+
+    $routeSource = app('router')->getRoutes();
+    if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
+        $routes = $routeSource->getRoutes();
+    } elseif ($routeSource instanceof \Traversable) {
+        $routes = iterator_to_array($routeSource);
+    } else {
+        $routes = is_array($routeSource) ? $routeSource : [];
+    }
+
+    $payload = [];
+    foreach ($routes as $route) {
+        $uri = null;
+        $methods = [];
+
+        if ($route instanceof \Illuminate\Routing\Route) {
+            $uri = $route->uri();
+            $methods = $route->methods();
+        } elseif (is_array($route)) {
+            $uri = $route['uri'] ?? $route['path'] ?? null;
+            $methods = $route['methods'] ?? $route['method'] ?? [];
+        }
+
+        if (! $uri) {
+            continue;
+        }
+
+        if (is_string($methods)) {
+            $methods = [$methods];
+        }
+
+        $payload[] = [
+            'path' => $uri,
+            'methods' => array_values($methods),
+        ];
+    }
+
+    return response()->json($payload, 200);
+});
 
 $router->get('/_debug/routes-auth', function () {
     $token = env('DIAG_TOKEN');

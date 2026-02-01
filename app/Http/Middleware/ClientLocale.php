@@ -10,6 +10,10 @@ class ClientLocale
     // https://stackoverflow.com/a/48133154 - thank you!
     public function handle($request, Closure $next)
     {
+        if ($request->is('_debug/ping-json') || $request->is('_debug/trace')) {
+            return $next($request);
+        }
+
         if (Session::has('locale')) {
             app('translator')->setLocale(Session::get('locale'));
         } else {

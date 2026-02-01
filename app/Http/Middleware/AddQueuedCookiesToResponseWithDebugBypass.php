@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+
+class AddQueuedCookiesToResponseWithDebugBypass extends AddQueuedCookiesToResponse
+{
+    public function handle($request, \Closure $next)
+    {
+        if ($this->shouldBypass($request)) {
+            return $next($request);
+        }
+
+        return parent::handle($request, $next);
+    }
+
+    private function shouldBypass($request): bool
+    {
+        return $request->is('_debug/ping-json') || $request->is('_debug/trace');
+    }
+}
