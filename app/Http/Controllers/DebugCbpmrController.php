@@ -60,7 +60,8 @@ class DebugCbpmrController extends Controller
             $stage = 'http_fetch';
             /** @var CbpmrShareFetcher $fetcher */
             $fetcher = app(CbpmrShareFetcher::class);
-            $fetchResult = $fetcher->fetch($url);
+            $useCookies = $request->boolean('use_cookies', true);
+            $fetchResult = $fetcher->fetch($url, ['use_cookies' => $useCookies]);
 
             if (! $fetchResult['ok']) {
                 return response()->json([
@@ -70,6 +71,7 @@ class DebugCbpmrController extends Controller
                     'code' => $fetchResult['code'] ?? null,
                     'url' => $fetchResult['url'] ?? $url,
                     'http_status' => $fetchResult['http_status'] ?? null,
+                    'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
                     'stage' => $stage,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
@@ -101,6 +103,7 @@ class DebugCbpmrController extends Controller
                 'ok' => true,
                 'stage' => $stage,
                 'final_url' => $fetchResult['final_url'] ?? $url,
+                'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
                 'http_status' => $httpStatus,
                 'content_type' => $fetchResult['content_type'] ?? null,
                 'body_length' => $bodyLength,

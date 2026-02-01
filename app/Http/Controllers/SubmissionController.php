@@ -114,6 +114,7 @@ class SubmissionController extends Controller
                 'title' => null,
                 'found_rows_count' => null,
                 'extracted_portable_id' => null,
+                'redirect_chain' => $shareResponse['redirect_chain'] ?? null,
             ]);
             if ($shareToken) {
                 throw new \RuntimeException('Failed to load CBPMR.info share page or API.');
@@ -198,7 +199,7 @@ class SubmissionController extends Controller
     private function processCbpmrInfoTokenUrl(CbpmrShareFetcher $shareFetcher, CbpmrShareParser $shareParser): void
     {
         $originalUrl = $this->diaryUrl;
-        $shareResponse = $shareFetcher->fetch($originalUrl);
+        $shareResponse = $shareFetcher->fetch($originalUrl, ['use_cookies' => true]);
         if (! $shareResponse['ok']) {
             $this->logCbpmrShareFailure([
                 'original_url' => $originalUrl,
@@ -207,17 +208,37 @@ class SubmissionController extends Controller
                 'title' => null,
                 'found_rows_count' => null,
                 'extracted_portable_id' => null,
+                'redirect_chain' => $shareResponse['redirect_chain'] ?? null,
             ]);
             throw new \RuntimeException('Failed to load CBPMR.info share page.');
         }
 
         $html = $shareResponse['body'] ?? '';
-        $finalUrl = $shareResponse['final_url'] ?? null;
+        $finalUrl = $shareResponse['final_url'] ?? ($shareResponse['url'] ?? null);
         $httpStatus = $shareResponse['http_status'] ?? null;
+        $redirectChain = $shareResponse['redirect_chain'] ?? [];
+        $finalPath = parse_url((string) $finalUrl, PHP_URL_PATH) ?? '';
+        $isErrorPath = Str::endsWith($finalPath, '/share/error');
+        $portableIdFromFinal = $this->extractPortableIdFromPath($finalPath);
         $portableParse = $shareParser->parsePortable($html);
         $title = $portableParse['title'] ?? null;
         $foundRowsCount = $portableParse['found_rows_count'] ?? null;
         $hasTable = $portableParse['has_table'] ?? false;
+
+        if ($isErrorPath) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $originalUrl,
+                'final_url' => $finalUrl,
+                'http_code' => $httpStatus,
+                'title' => $title,
+                'found_rows_count' => $foundRowsCount,
+                'extracted_portable_id' => null,
+                'redirect_chain' => $redirectChain,
+            ]);
+            throw new SubmissionException(422, [
+                __('Odkaz se nepodařilo otevřít bez prohlížeče (cbpmr redirect vyžaduje session). Zkuste vložit přímo portable link.'),
+            ]);
+        }
 
         if ($hasTable) {
             try {
@@ -231,16 +252,17 @@ class SubmissionController extends Controller
                     'title' => $title,
                     'found_rows_count' => $foundRowsCount,
                     'extracted_portable_id' => null,
+                    'redirect_chain' => $redirectChain,
                 ]);
             }
         }
 
-        $finalPath = parse_url((string) $finalUrl, PHP_URL_PATH) ?? '';
-        $isErrorPath = Str::endsWith($finalPath, '/share/error');
-
         $portableId = null;
         if ($isErrorPath || ! $hasTable) {
-            $portableId = $this->extractPortableIdFromQuery($finalUrl);
+            $portableId = $portableIdFromFinal;
+            if (! $portableId) {
+                $portableId = $this->extractPortableIdFromQuery($finalUrl);
+            }
             if (! $portableId) {
                 $portableId = $this->extractPortableIdFromHtml($html);
             }
@@ -259,6 +281,7 @@ class SubmissionController extends Controller
                 'title' => $title,
                 'found_rows_count' => $foundRowsCount,
                 'extracted_portable_id' => $portableId,
+                'redirect_chain' => $redirectChain,
             ]);
             return;
         }
@@ -271,6 +294,7 @@ class SubmissionController extends Controller
             'found_rows_count' => $foundRowsCount,
             'extracted_portable_id' => null,
             'body_snippet' => $this->snippetHtml($html),
+            'redirect_chain' => $redirectChain,
         ]);
         throw new SubmissionException(422, [
             __('Odkaz (token) se nepodařilo převést. Prosím pošlete odkaz ve formátu https://www.cbpmr.info/share/portable/XXXX.'),
@@ -290,6 +314,7 @@ class SubmissionController extends Controller
                 'title' => null,
                 'found_rows_count' => null,
                 'extracted_portable_id' => $context['extracted_portable_id'] ?? null,
+                'redirect_chain' => $shareResponse['redirect_chain'] ?? null,
             ]);
             throw new \RuntimeException('Failed to load CBPMR.info portable page.');
         }
@@ -307,6 +332,7 @@ class SubmissionController extends Controller
                 'title' => $portableParse['title'] ?? null,
                 'found_rows_count' => $portableParse['found_rows_count'] ?? null,
                 'extracted_portable_id' => $context['extracted_portable_id'] ?? null,
+                'redirect_chain' => $shareResponse['redirect_chain'] ?? null,
             ]);
             throw $e;
         }
@@ -438,6 +464,10 @@ class SubmissionController extends Controller
             'found_rows_count: ' . ($context['found_rows_count'] ?? ''),
             'extracted_portable_id: ' . ($context['extracted_portable_id'] ?? ''),
         ];
+
+        if (! empty($context['redirect_chain'])) {
+            $payload[] = 'redirect_chain: ' . json_encode($context['redirect_chain'], JSON_UNESCAPED_SLASHES);
+        }
 
         if (! empty($context['body_snippet'])) {
             $payload[] = 'body_snippet: ' . $context['body_snippet'];
