@@ -136,8 +136,9 @@ class DebugCbpmrController extends Controller
             $logPath = storage_path('logs/last_exception.txt');
             $urlParam = $request->query('url');
             $trace = Str::limit($e->getTraceAsString(), 2000, "\n...truncated...");
+            $ts = \Carbon\Carbon::now()->toIso8601String();
             $logMessage = implode("\n", [
-                '[' . now()->toDateTimeString() . '] cbpmr-fetch exception',
+                '[' . $ts . '] cbpmr-fetch exception',
                 'stage: ' . $stage,
                 'message: ' . $e->getMessage(),
                 'location: ' . $e->getFile() . ':' . $e->getLine(),
@@ -334,8 +335,9 @@ class DebugCbpmrController extends Controller
             $hostSeen = is_array($parsed) ? ($parsed['host'] ?? null) : null;
             $traceLines = explode("\n", $e->getTraceAsString());
             $traceSnippet = implode("\n", array_slice($traceLines, 0, 20));
+            $ts = \Carbon\Carbon::now()->toIso8601String();
             $logMessage = implode("\n", [
-                '[' . now()->toDateTimeString() . '] cbpmr-parse exception',
+                '[' . $ts . '] cbpmr-parse exception',
                 'stage: ' . $stage,
                 'class: ' . get_class($e),
                 'url: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
