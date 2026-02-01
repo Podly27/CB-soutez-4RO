@@ -162,12 +162,12 @@ class DebugCbpmrController extends Controller
 
     public function parse(\Laravel\Lumen\Http\Request $request)
     {
-        $serverToken = env('DIAG_TOKEN');
-        $reqToken = (string) ($_GET['token'] ?? '');
-        $rawQs = $_SERVER['QUERY_STRING'] ?? null;
-        $getKeys = array_keys($_GET);
-
         if (($_GET['_enter'] ?? null) === '1') {
+            $serverToken = env('DIAG_TOKEN');
+            $reqToken = (string) ($_GET['token'] ?? '');
+            $rawQs = $_SERVER['QUERY_STRING'] ?? null;
+            $getKeys = array_keys($_GET);
+
             return response()->json([
                 'ok' => true,
                 'stage' => 'entered2',
@@ -179,7 +179,14 @@ class DebugCbpmrController extends Controller
             ], 200);
         }
 
-        if (! $serverToken || ! $reqToken || ! hash_equals($serverToken, $reqToken)) {
+        $stage = 'start';
+        $serverToken = env('DIAG_TOKEN');
+        $reqToken = (string) ($_GET['token'] ?? '');
+        $url = $_GET['url'] ?? '';
+        $rawQs = $_SERVER['QUERY_STRING'] ?? null;
+        $getKeys = array_keys($_GET);
+
+        if (! $serverToken || $reqToken === '' || ! hash_equals($serverToken, $reqToken)) {
             return response()->json([
                 'ok' => false,
                 'error' => 'forbidden',
@@ -192,37 +199,38 @@ class DebugCbpmrController extends Controller
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
 
-        $stage = 'start';
+        if (! is_string($url) || trim($url) === '') {
+            return response()->json([
+                'ok' => false,
+                'error' => 'missing_url',
+                'stage' => 'validate',
+                'raw_qs' => $rawQs,
+                'get_keys' => $getKeys,
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
+
+        $parsed = parse_url($url);
+        $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
+        if (! $host) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'invalid_url',
+                'stage' => 'validate',
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
+
+        if ($host !== 'cbpmr.info') {
+            return response()->json([
+                'ok' => false,
+                'error' => 'invalid_host',
+                'stage' => 'validate',
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
 
         try {
             header('Content-Type: application/json; charset=utf-8');
             ini_set('display_errors', '0');
             error_reporting(E_ALL & ~E_DEPRECATED);
-
-            $url = $_GET['url'] ?? '';
-            if (! is_string($url) || trim($url) === '') {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'missing_url',
-                    'stage' => $stage,
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
-
-            $stage = 'parse_url';
-            $parsed = parse_url($url);
-            $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
-
-            $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
-            if (! in_array($host, $allowedHosts, true)) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'invalid_host',
-                    'stage' => $stage,
-                    'http_code' => null,
-                    'final_url' => null,
-                    'redirect_chain' => null,
-                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-            }
 
             $stage = 'resolve_service';
             /** @var CbpmrShareService $service */
