@@ -135,148 +135,177 @@ $router->get('/health', function () {
     return response()->json($healthPayload, 200);
 });
 
-$router->get('/_debug/response', function () {
-    $token = env('DIAG_TOKEN');
-    $requestToken = request()->query('token');
+$debugPrefixes = ['/_debug', '/public/_debug'];
 
-    if (! $token || $requestToken !== $token) {
-        abort(404);
-    }
+$registerDebugRoutes = function (string $prefix) use ($router) {
+    $router->get("{$prefix}/response", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
 
-    return response()->json(['ok' => true], 200);
-});
-
-$router->get('/_debug/ping-json', function () {
-    return response()->json([
-        'ok' => true,
-        'ts' => date('c'),
-    ], 200);
-});
-
-$router->get('/_debug/trace', 'DebugCbpmrController@trace');
-$router->get('/_debug/cbpmr-fetch', 'DebugCbpmrController@fetch');
-$router->get('/_debug/cbpmr-parse', 'DebugCbpmrController@parse');
-
-$router->get('/_debug/routes', function () {
-    $token = env('DIAG_TOKEN');
-    $requestToken = request()->query('token');
-
-    if (! $token || $requestToken !== $token) {
-        abort(404);
-    }
-
-    $routeSource = app('router')->getRoutes();
-    if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
-        $routes = $routeSource->getRoutes();
-    } elseif ($routeSource instanceof \Traversable) {
-        $routes = iterator_to_array($routeSource);
-    } else {
-        $routes = is_array($routeSource) ? $routeSource : [];
-    }
-
-    $payload = [];
-    foreach ($routes as $route) {
-        $uri = null;
-        $methods = [];
-
-        if ($route instanceof \Illuminate\Routing\Route) {
-            $uri = $route->uri();
-            $methods = $route->methods();
-        } elseif (is_array($route)) {
-            $uri = $route['uri'] ?? $route['path'] ?? null;
-            $methods = $route['methods'] ?? $route['method'] ?? [];
+        if (! $token || $requestToken !== $token) {
+            abort(404);
         }
 
-        if (! $uri) {
-            continue;
+        return response()->json(['ok' => true], 200);
+    });
+
+    $router->get("{$prefix}/ping-json", function () {
+        return response()->json([
+            'ok' => true,
+            'ts' => date('c'),
+        ], 200);
+    });
+
+    $router->get("{$prefix}/trace", 'DebugCbpmrController@trace');
+    $router->get("{$prefix}/cbpmr-fetch", 'DebugCbpmrController@fetch');
+    $router->get("{$prefix}/cbpmr-parse", 'DebugCbpmrController@parse');
+
+    $router->get("{$prefix}/routes", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
+
+        if (! $token || $requestToken !== $token) {
+            abort(404);
         }
 
-        if (is_string($methods)) {
-            $methods = [$methods];
+        $routeSource = app('router')->getRoutes();
+        if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
+            $routes = $routeSource->getRoutes();
+        } elseif ($routeSource instanceof \Traversable) {
+            $routes = iterator_to_array($routeSource);
+        } else {
+            $routes = is_array($routeSource) ? $routeSource : [];
         }
 
-        $payload[] = [
-            'path' => $uri,
-            'methods' => array_values($methods),
-        ];
-    }
+        $payload = [];
+        foreach ($routes as $route) {
+            $uri = null;
+            $methods = [];
 
-    return response()->json($payload, 200);
-});
+            if ($route instanceof \Illuminate\Routing\Route) {
+                $uri = $route->uri();
+                $methods = $route->methods();
+            } elseif (is_array($route)) {
+                $uri = $route['uri'] ?? $route['path'] ?? null;
+                $methods = $route['methods'] ?? $route['method'] ?? [];
+            }
 
-$router->get('/_debug/routes-auth', function () {
-    $token = env('DIAG_TOKEN');
-    $requestToken = request()->query('token');
+            if (! $uri) {
+                continue;
+            }
 
-    if (! $token || $requestToken !== $token) {
-        abort(404);
-    }
+            if (is_string($methods)) {
+                $methods = [$methods];
+            }
 
-    $routeSource = app('router')->getRoutes();
-    if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
-        $routes = $routeSource->getRoutes();
-    } elseif ($routeSource instanceof \Traversable) {
-        $routes = iterator_to_array($routeSource);
-    } else {
-        $routes = is_array($routeSource) ? $routeSource : [];
-    }
-
-    $matches = [];
-    foreach ($routes as $route) {
-        $uri = null;
-        $methods = [];
-
-        if ($route instanceof \Illuminate\Routing\Route) {
-            $uri = $route->uri();
-            $methods = $route->methods();
-        } elseif (is_array($route)) {
-            $uri = $route['uri'] ?? $route['path'] ?? null;
-            $methods = $route['methods'] ?? $route['method'] ?? [];
+            $payload[] = [
+                'path' => $uri,
+                'methods' => array_values($methods),
+            ];
         }
 
-        if (! $uri) {
-            continue;
+        return response()->json($payload, 200);
+    });
+
+    $router->get("{$prefix}/routes-auth", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
+
+        if (! $token || $requestToken !== $token) {
+            abort(404);
         }
 
-        $shouldInclude = Str::contains($uri, ['/auth', '/login', 'facebook', 'google', 'twitter']);
-
-        if (! $shouldInclude) {
-            continue;
+        $routeSource = app('router')->getRoutes();
+        if ($routeSource instanceof \Illuminate\Routing\RouteCollection) {
+            $routes = $routeSource->getRoutes();
+        } elseif ($routeSource instanceof \Traversable) {
+            $routes = iterator_to_array($routeSource);
+        } else {
+            $routes = is_array($routeSource) ? $routeSource : [];
         }
 
-        if (is_string($methods)) {
-            $methods = [$methods];
+        $matches = [];
+        foreach ($routes as $route) {
+            $uri = null;
+            $methods = [];
+
+            if ($route instanceof \Illuminate\Routing\Route) {
+                $uri = $route->uri();
+                $methods = $route->methods();
+            } elseif (is_array($route)) {
+                $uri = $route['uri'] ?? $route['path'] ?? null;
+                $methods = $route['methods'] ?? $route['method'] ?? [];
+            }
+
+            if (! $uri) {
+                continue;
+            }
+
+            $shouldInclude = Str::contains($uri, ['/auth', '/login', 'facebook', 'google', 'twitter']);
+
+            if (! $shouldInclude) {
+                continue;
+            }
+
+            if (is_string($methods)) {
+                $methods = [$methods];
+            }
+
+            $matches[] = [
+                'path' => $uri,
+                'methods' => array_values($methods),
+            ];
         }
 
-        $matches[] = [
-            'path' => $uri,
-            'methods' => array_values($methods),
-        ];
-    }
+        return response()->json($matches, 200);
+    });
 
-    return response()->json($matches, 200);
-});
+    $router->get("{$prefix}/db-schema", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
 
-$router->get('/_debug/db-schema', function () {
-    $token = env('DIAG_TOKEN');
-    $requestToken = request()->query('token');
+        if (! $token || $requestToken !== $token) {
+            abort(404);
+        }
 
-    if (! $token || $requestToken !== $token) {
-        abort(404);
-    }
+        try {
+            $columns = DB::select("SHOW COLUMNS FROM `user` LIKE 'email'");
+        } catch (\Throwable $e) {
+            $message = sprintf('%s in %s:%d', $e->getMessage(), $e->getFile(), $e->getLine());
 
-    try {
-        $columns = DB::select("SHOW COLUMNS FROM `user` LIKE 'email'");
-    } catch (\Throwable $e) {
-        $message = sprintf('%s in %s:%d', $e->getMessage(), $e->getFile(), $e->getLine());
+            return response()->json([
+                'error' => $message,
+            ], 500);
+        }
+
+        return response()->json($columns, 200);
+    });
+
+    $router->get("{$prefix}/mail", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
+
+        if (! $token || $requestToken !== $token) {
+            abort(404);
+        }
+
+        $defaultMailer = config('mail.default');
+        $mailerConfig = config("mail.mailers.{$defaultMailer}", []);
 
         return response()->json([
-            'error' => $message,
-        ], 500);
-    }
+            'mailer' => $defaultMailer,
+            'host' => $mailerConfig['host'] ?? null,
+            'port' => $mailerConfig['port'] ?? null,
+            'encryption' => $mailerConfig['encryption'] ?? null,
+            'from_address' => config('mail.from.address'),
+            'from_name' => config('mail.from.name'),
+        ], 200);
+    });
+};
 
-    return response()->json($columns, 200);
-});
+foreach ($debugPrefixes as $debugPrefix) {
+    $registerDebugRoutes($debugPrefix);
+}
 
 $router->get('/diag', function () {
     $token = env('DIAG_TOKEN');
@@ -362,27 +391,6 @@ $router->get('/diag', function () {
         'oauth_last_error' => $lastOauthError === false ? null : $lastOauthError,
         'last_mail_error' => $lastMailError === false ? null : $lastMailError,
         'last_rejected_provider' => $lastRejectedProvider === false ? null : $lastRejectedProvider,
-    ], 200);
-});
-
-$router->get('/_debug/mail', function () {
-    $token = env('DIAG_TOKEN');
-    $requestToken = request()->query('token');
-
-    if (! $token || $requestToken !== $token) {
-        abort(404);
-    }
-
-    $defaultMailer = config('mail.default');
-    $mailerConfig = config("mail.mailers.{$defaultMailer}", []);
-
-    return response()->json([
-        'mailer' => $defaultMailer,
-        'host' => $mailerConfig['host'] ?? null,
-        'port' => $mailerConfig['port'] ?? null,
-        'encryption' => $mailerConfig['encryption'] ?? null,
-        'from_address' => config('mail.from.address'),
-        'from_name' => config('mail.from.name'),
     ], 200);
 });
 

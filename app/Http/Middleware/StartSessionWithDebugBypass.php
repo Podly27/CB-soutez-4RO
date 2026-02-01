@@ -17,6 +17,9 @@ class StartSessionWithDebugBypass extends StartSession
 
     private function shouldBypass($request): bool
     {
-        return $request->is('_debug/ping-json') || $request->is('_debug/trace');
+        return $request->is('_debug/ping-json')
+            || $request->is('_debug/trace')
+            || $request->is('public/_debug/ping-json')
+            || $request->is('public/_debug/trace');
     }
 }

@@ -10,7 +10,12 @@ class ClientLocale
     // https://stackoverflow.com/a/48133154 - thank you!
     public function handle($request, Closure $next)
     {
-        if ($request->is('_debug/ping-json') || $request->is('_debug/trace')) {
+        if (
+            $request->is('_debug/ping-json')
+            || $request->is('_debug/trace')
+            || $request->is('public/_debug/ping-json')
+            || $request->is('public/_debug/trace')
+        ) {
             return $next($request);
         }
 
