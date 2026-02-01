@@ -9,4 +9,4 @@ RewriteRule ^ - [L]
 
 # Otherwise forward everything into /public
 RewriteCond %{REQUEST_URI} !^/public/
-RewriteRule ^(.*)$ public/$1 [L]
+RewriteRule ^(.*)$ public/$1 [L,QSA]

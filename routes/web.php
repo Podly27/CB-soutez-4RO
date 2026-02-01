@@ -156,6 +156,12 @@ $registerDebugRoutes = function (string $prefix) use ($router) {
         ], 200);
     });
 
+    $router->get("{$prefix}/echo-qs", function () {
+        return response()->json([
+            'query' => request()->query(),
+        ], 200);
+    });
+
     $router->get("{$prefix}/trace", 'DebugCbpmrController@trace');
     $router->get("{$prefix}/cbpmr-fetch", 'DebugCbpmrController@fetch');
     $router->get("{$prefix}/cbpmr-parse", 'DebugCbpmrController@parse');
