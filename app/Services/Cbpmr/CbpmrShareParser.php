@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Cbpmr;
 
-use DiDom\Document;
+use DOMDocument;
+use DOMElement;
+use DOMNode;
+use DOMNodeList;
+use DOMXPath;
 
 class CbpmrShareParser
 {
@@ -12,75 +16,78 @@ class CbpmrShareParser
 
     public function parsePortable(string $html): array
     {
-        $document = new Document($html, true);
+        $xpath = $this->createXPath($html);
 
-        $title = null;
-        $titleElement = $document->first('title');
-        if ($titleElement) {
-            $title = trim($titleElement->text());
-            if ($title === '') {
-                $title = null;
-            }
-        }
+        $title = $this->normalizeText($this->textFromXPath($xpath, '//title'));
+        $title = $title !== '' ? $title : null;
 
-        $headerElement = $document->first('header');
-        $headerText = $headerElement ? $headerElement->text() : $document->text();
+        $headerText = $this->normalizeText($this->textFromXPath($xpath, '//header'));
         $date = null;
         if (preg_match('/\b\d{1,2}\.\d{1,2}\.\d{4}\b/u', $headerText, $matches)) {
             $date = $matches[0];
         }
 
-        $locator = $this->textFromSelector($document, '#locator');
-        $place = $this->textFromSelector($document, '#place');
-        $distance = $this->textFromSelector($document, '#distance');
-        $totalKm = $this->textFromSelector($document, '#km');
+        $expName = $title ?: ($headerText !== '' ? $headerText : null);
+        $locator = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="locator"]'));
+        $place = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="place"]'));
+        $distance = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="distance"]'));
+        $totalKm = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="km"]'));
+
+        $locator = $locator !== '' ? $locator : null;
+        $place = $place !== '' ? $place : null;
 
         $qsoCount = $this->extractInt($distance);
         $totalKmValue = $this->extractInt($totalKm);
 
-        $rows = $document->find('table#myTable tbody tr');
+        $rows = $xpath->query('//table[@id="myTable"]//tbody//tr');
         $parsedRows = [];
         $foundRowsCount = 0;
 
-        foreach ($rows as $row) {
-            $cells = $row->find('td');
-            if (count($cells) < 3) {
-                continue;
+        if ($rows instanceof DOMNodeList) {
+            foreach ($rows as $row) {
+                if (! $row instanceof DOMElement) {
+                    continue;
+                }
+                $cells = $this->filterElements($xpath->query('./td', $row));
+                if (count($cells) < 2) {
+                    continue;
+                }
+
+                $foundRowsCount++;
+
+                $time = isset($cells[1]) ? $this->normalizeText($cells[1]->textContent) : null;
+                $name = $this->firstTextMatch($xpath->query('.//span[contains(@class, "duplicity-name")]', $row));
+                $remoteLocator = $this->firstTextMatch($xpath->query('.//span[contains(@class, "font-caption-locator-small")]', $row));
+                $noteNode = $this->firstNodeMatch($xpath->query('.//br/following-sibling::span[contains(@class, "font-ariel")][1]', $row));
+                if (! $noteNode) {
+                    $noteNode = $this->nthNodeMatch($xpath->query('.//span[contains(@class, "font-ariel")]', $row), 1);
+                }
+                $note = $noteNode ? $this->normalizeText($noteNode->textContent) : null;
+                $kmText = $this->firstTextMatch($xpath->query('.//p[contains(@class, "span-km")]', $row));
+                $km = $this->extractInt($kmText);
+
+                $parsedRows[] = [
+                    'time' => $time !== '' ? $time : null,
+                    'name' => $name !== '' ? $name : null,
+                    'note' => $note !== '' ? $note : null,
+                    'remote_locator' => $remoteLocator !== '' ? $remoteLocator : null,
+                    'km' => $km,
+                ];
             }
-
-            $foundRowsCount++;
-
-            $time = isset($cells[2]) ? $this->normalizeText($cells[2]->text()) : null;
-            $nameElement = $row->first('span.duplicity-name');
-            $locatorElement = $row->first('span.font-caption-locator-small');
-            $noteSpans = $row->find('span.font-ariel');
-            $note = null;
-            if (count($noteSpans) >= 2) {
-                $note = $this->normalizeText($noteSpans[1]->text());
-            }
-
-            $kmElement = $row->first('p.span-km');
-            $km = $kmElement ? $this->extractInt($kmElement->text()) : null;
-
-            $parsedRows[] = [
-                'time' => $time,
-                'name' => $nameElement ? $this->normalizeText($nameElement->text()) : null,
-                'note' => $note,
-                'locator' => $locatorElement ? $this->normalizeText($locatorElement->text()) : null,
-                'km' => $km,
-            ];
         }
 
-        $hasTable = count($document->find('table#myTable')) > 0;
+        $hasTable = $xpath->query('//table[@id="myTable"]')->length > 0;
+        $qsoCount = $qsoCount ?? ($foundRowsCount > 0 ? $foundRowsCount : null);
 
         return [
             'title' => $title,
+            'exp_name' => $expName,
             'date' => $date,
-            'qth_locator' => $locator,
-            'qth_name' => $place,
+            'my_locator' => $locator,
+            'place' => $place,
             'qso_count' => $qsoCount,
             'total_km' => $totalKmValue,
-            'rows' => $parsedRows,
+            'entries' => $parsedRows,
             'found_rows_count' => $foundRowsCount,
             'has_table' => $hasTable,
         ];
@@ -88,63 +95,16 @@ class CbpmrShareParser
 
     public function parse(string $html): array
     {
-        $document = new Document($html, true);
-
-        $title = null;
-        $titleElement = $document->first('title');
-        if ($titleElement) {
-            $title = trim($titleElement->text());
-            if ($title === '') {
-                $title = null;
-            }
-        }
-
-        $locator = null;
-        $locatorElement = $document->first('#locator');
-        if ($locatorElement) {
-            $locator = $this->normalizeText($locatorElement->text());
-        }
-
-        $rows = $document->find('table#myTable tr');
-        $firstRows = [];
-        $qsoCount = 0;
-
-        foreach ($rows as $row) {
-            $cells = $row->find('th, td');
-            if (count($cells) < 4) {
-                continue;
-            }
-
-            $hasHeader = count($row->find('th')) > 0;
-            if ($hasHeader) {
-                continue;
-            }
-
-            $qsoCount++;
-
-            if (count($firstRows) < self::MAX_PREVIEW_ROWS) {
-                $firstRows[] = [
-                    'time' => $this->normalizeText($cells[0]->text()),
-                    'name' => $this->normalizeText($cells[1]->text()),
-                    'locator' => $this->normalizeText($cells[2]->text()),
-                    'km' => $this->normalizeText($cells[3]->text()),
-                ];
-            }
-        }
-
-        $detectedFormat = 'unknown';
-        if (count($rows) > 0) {
-            $detectedFormat = 'html-table';
-        } elseif (preg_match('/id="app"|data-v-app/i', $html)) {
-            $detectedFormat = 'spa';
-        }
+        $portable = $this->parsePortable($html);
+        $entries = $portable['entries'] ?? [];
+        $firstRows = array_slice($entries, 0, self::MAX_PREVIEW_ROWS);
 
         return [
-            'title' => $title,
-            'detected_format' => $detectedFormat,
+            'title' => $portable['title'] ?? null,
+            'detected_format' => ($portable['has_table'] ?? false) ? 'html-table' : 'unknown',
             'parsed_preview' => [
-                'qso_count' => $qsoCount,
-                'my_locator' => $locator,
+                'qso_count' => $portable['qso_count'] ?? null,
+                'my_locator' => $portable['my_locator'] ?? null,
                 'first_rows' => $firstRows,
             ],
         ];
@@ -159,21 +119,30 @@ class CbpmrShareParser
         return null;
     }
 
-    private function normalizeText(string $value): string
+    private function normalizeText(?string $value): string
     {
-        $value = preg_replace('/\s+/u', ' ', $value);
-        return trim($value ?? '');
+        $value = preg_replace('/\s+/u', ' ', $value ?? '');
+        return trim($value);
     }
 
-    private function textFromSelector(Document $document, string $selector): ?string
+    private function createXPath(string $html): DOMXPath
     {
-        $element = $document->first($selector);
-        if (! $element) {
+        $dom = new DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($html);
+        libxml_clear_errors();
+        return new DOMXPath($dom);
+    }
+
+    private function textFromXPath(DOMXPath $xpath, string $query): ?string
+    {
+        $nodes = $xpath->query($query);
+        $node = $nodes instanceof DOMNodeList ? $nodes->item(0) : null;
+        if (! $node instanceof DOMNode) {
             return null;
         }
 
-        $text = $this->normalizeText($element->text());
-        return $text !== '' ? $text : null;
+        return $node->textContent;
     }
 
     private function extractInt(?string $value): ?int
@@ -187,5 +156,64 @@ class CbpmrShareParser
         }
 
         return null;
+    }
+
+    /**
+     * @param DOMNodeList|null $nodes
+     * @return array<int, DOMElement>
+     */
+    private function filterElements(?DOMNodeList $nodes): array
+    {
+        if (! $nodes instanceof DOMNodeList) {
+            return [];
+        }
+        $elements = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMElement) {
+                $elements[] = $node;
+            }
+        }
+        return $elements;
+    }
+
+    private function firstNodeMatch(?DOMNodeList $nodes): ?DOMNode
+    {
+        if (! $nodes instanceof DOMNodeList) {
+            return null;
+        }
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMNode) {
+                return $node;
+            }
+        }
+        return null;
+    }
+
+    private function nthNodeMatch(?DOMNodeList $nodes, int $index): ?DOMNode
+    {
+        if (! $nodes instanceof DOMNodeList) {
+            return null;
+        }
+        $position = 0;
+        foreach ($nodes as $node) {
+            if (! $node instanceof DOMNode) {
+                continue;
+            }
+            if ($position === $index) {
+                return $node;
+            }
+            $position++;
+        }
+        return null;
+    }
+
+    private function firstTextMatch(?DOMNodeList $nodes): ?string
+    {
+        $node = $this->firstNodeMatch($nodes);
+        if (! $node) {
+            return null;
+        }
+        $text = $this->normalizeText($node->textContent);
+        return $text !== '' ? $text : null;
     }
 }

@@ -139,4 +139,122 @@ class DebugCbpmrController extends Controller
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
     }
+
+    public function parse(Request $request)
+    {
+        header('Content-Type: application/json; charset=utf-8');
+        ini_set('display_errors', '0');
+
+        $stage = 'start';
+
+        try {
+            $serverToken = env('DIAG_TOKEN') ?: env('DIAGTOKEN') ?: env('DIAG_SECRET') ?: env('DEBUG_TOKEN');
+            $reqToken = (string) $request->query('token', '');
+
+            if (! $serverToken || ! hash_equals((string) $serverToken, $reqToken)) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'forbidden',
+                    'stage' => $stage,
+                    'server_token_set' => (bool) $serverToken,
+                    'server_token_len' => strlen((string) $serverToken),
+                    'req_token_len' => strlen($reqToken),
+                    'req_has_url' => (bool) $request->query('url'),
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'validate_ok';
+
+            $url = $request->query('url');
+            if (! is_string($url) || trim($url) === '') {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'missing_url',
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'parse_url';
+            $parsed = parse_url($url);
+            $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
+            $path = is_array($parsed) ? ($parsed['path'] ?? '') : '';
+
+            $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
+            if (! in_array($host, $allowedHosts, true) || ! Str::startsWith($path, '/share/')) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'invalid_host',
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'http_fetch';
+            /** @var CbpmrShareFetcher $fetcher */
+            $fetcher = app(CbpmrShareFetcher::class);
+            $fetchResult = $fetcher->fetch($url, ['use_cookies' => true]);
+
+            if (! $fetchResult['ok']) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'fetch_failed',
+                    'message' => $fetchResult['error'] ?? 'Fetch failed.',
+                    'code' => $fetchResult['code'] ?? null,
+                    'url' => $fetchResult['url'] ?? $url,
+                    'http_status' => $fetchResult['http_status'] ?? null,
+                    'redirect_chain' => $fetchResult['redirect_chain'] ?? null,
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'parse_html';
+            /** @var CbpmrShareParser $parser */
+            $parser = app(CbpmrShareParser::class);
+            $parsedResult = $parser->parsePortable($fetchResult['body'] ?? '');
+            $entries = $parsedResult['entries'] ?? [];
+            $firstRows = array_slice($entries, 0, 3);
+            $finalUrl = $fetchResult['final_url'] ?? $url;
+            $finalPath = parse_url($finalUrl, PHP_URL_PATH) ?? '';
+            $portableId = null;
+            if (preg_match('|/share/portable/(\\d+)|', $finalPath, $matches)) {
+                $portableId = $matches[1];
+            }
+
+            $stage = 'return_ok';
+            return response()->json([
+                'ok' => true,
+                'stage' => $stage,
+                'final_url' => $finalUrl,
+                'portable_id' => $portableId,
+                'my_locator' => $parsedResult['my_locator'] ?? null,
+                'qso_count' => $parsedResult['qso_count'] ?? null,
+                'total_km' => $parsedResult['total_km'] ?? null,
+                'first_rows' => $firstRows,
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        } catch (\Throwable $e) {
+            $logPath = storage_path('logs/last_exception.txt');
+            $urlParam = $request->query('url');
+            $trace = Str::limit($e->getTraceAsString(), 2000, "\n...truncated...");
+            $logMessage = implode("\n", [
+                '[' . now()->toDateTimeString() . '] cbpmr-parse exception',
+                'stage: ' . $stage,
+                'message: ' . $e->getMessage(),
+                'location: ' . $e->getFile() . ':' . $e->getLine(),
+                'url_param: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
+                'trace:',
+                $trace,
+                '',
+            ]);
+            $logMessage = Str::limit($logMessage, 4000, "\n...truncated...");
+            @file_put_contents($logPath, $logMessage, FILE_APPEND);
+
+            return response()->json([
+                'ok' => false,
+                'error' => 'exception',
+                'stage' => $stage,
+                'class' => get_class($e),
+                'message' => $e->getMessage(),
+                'location' => $e->getFile() . ':' . $e->getLine(),
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
+    }
 }

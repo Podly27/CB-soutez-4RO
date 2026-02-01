@@ -14,7 +14,7 @@ class Diary extends Model
      */
     protected $fillable = [
         'call_sign', 'diary_url', 'qth_name', 'qth_locator', 'qth_locator_lon', 'qth_locator_lat',
-        'qso_count', 'created_at', 'updated_at', 'score_points', 'email', 'category_id', 'contest_id', 'user_id'
+        'qso_count', 'created_at', 'updated_at', 'score_points', 'email', 'category_id', 'contest_id', 'user_id', 'options'
     ];
 
     /**
@@ -23,6 +23,10 @@ class Diary extends Model
      * @var array
      */
     protected $hidden = [ 'email', 'category_id', 'contest_id' ];
+
+    protected $casts = [
+        'options' => 'array',
+    ];
 
     public function category()
     {

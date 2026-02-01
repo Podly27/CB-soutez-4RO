@@ -147,6 +147,7 @@ $router->get('/_debug/response', function () {
 });
 
 $router->get('/_debug/cbpmr-fetch', 'DebugCbpmrController@fetch');
+$router->get('/_debug/cbpmr-parse', 'DebugCbpmrController@parse');
 
 $router->get('/_debug/routes-auth', function () {
     $token = env('DIAG_TOKEN');
