@@ -72,16 +72,41 @@ class SubmissionController extends Controller
     public function processCbpmrInfo()
     {
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
-        $context = stream_context_create([ 'http' => [ 'follow_location' => false ] ]);
+        $context = stream_context_create([
+            'http' => [
+                'follow_location' => false,
+                'header' => "User-Agent: Mozilla/5.0\r\n",
+                'timeout' => 10,
+            ],
+        ]);
         $html = file_get_contents($this->diaryUrl, false, $context);
         if ($html === false) {
-            throw new \RuntimeException('Failed to load CBPMR.info share page.');
+            $fallbackContext = stream_context_create([
+                'http' => [
+                    'follow_location' => true,
+                    'header' => "User-Agent: Mozilla/5.0\r\n",
+                    'timeout' => 10,
+                ],
+            ]);
+            $html = file_get_contents($this->diaryUrl, false, $fallbackContext);
+            if ($html === false) {
+                throw new \RuntimeException('Failed to load CBPMR.info share page.');
+            }
         }
 
         $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
         $finalUrl = NULL;
         if (isset($http_response_header)) {
             foreach ($http_response_header as $header) {
+                if (preg_match('|^Location:\s*(\S+)|i', $header, $matches)) {
+                    $location = $matches[1];
+                    $locationPath = parse_url($location, PHP_URL_PATH) ?: $location;
+                    if (preg_match('|/share/[^/]+/(\d+)|', $locationPath, $idMatches)) {
+                        $diaryId = trim($idMatches[1]);
+                        $finalUrl = $apiBaseUrl . $diaryId;
+                        break;
+                    }
+                }
                 if (preg_match('|^Location: /share/[^/]+/\d+|', $header)) {
                     $diaryId = trim(preg_replace('|.*/share/[^/]+/(\d+).*|', '$1', $header));
                     $finalUrl = $apiBaseUrl . $diaryId;
@@ -107,15 +132,28 @@ class SubmissionController extends Controller
         }
 
         $auth = base64_encode(config('ctvero.cbpmrInfoApiAuthUsername') . ':' . config('ctvero.cbpmrInfoApiAuthPassword'));
-        $new_context = stream_context_create([ 'http' => [ 'header' => 'Authorization: Basic ' . $auth ] ]);
+        $new_context = stream_context_create([
+            'http' => [
+                'header' => "Authorization: Basic {$auth}\r\nUser-Agent: Mozilla/5.0\r\n",
+                'timeout' => 10,
+            ],
+        ]);
         $data = json_decode(file_get_contents($finalUrl, false, $new_context));
-        if (! $data || ! isset($data->callName, $data->place, $data->locator, $data->totalCalls)) {
+        $payload = $data;
+        if (isset($data->data) && is_object($data->data)) {
+            $payload = $data->data;
+        }
+        $callSign = $payload->callName ?? $payload->callSign ?? $payload->call_sign ?? null;
+        $place = $payload->place ?? $payload->qthName ?? $payload->qth_name ?? null;
+        $locator = $payload->locator ?? $payload->qthLocator ?? $payload->qth_locator ?? null;
+        $totalCalls = $payload->totalCalls ?? $payload->total_calls ?? $payload->qsoCount ?? null;
+        if (! $payload || ! $callSign || ! $place || ! $locator || $totalCalls === null) {
             throw new \RuntimeException('Invalid CBPMR.info API response.');
         }
-        $this->callSign = $data->callName;
-        $this->qthName = $data->place;
-        $this->qthLocator = $data->locator;
-        $this->qsoCount = $data->totalCalls;
+        $this->callSign = $callSign;
+        $this->qthName = $place;
+        $this->qthLocator = $locator;
+        $this->qsoCount = $totalCalls;
     }
 
     private function resolveCbpmrInfoApiBaseUrl(): string
