@@ -162,12 +162,23 @@ class DebugCbpmrController extends Controller
 
     public function parse(\Laravel\Lumen\Http\Request $request)
     {
-        if ($request->query('_enter') === '1') {
-            return response()->json(['ok' => true, 'stage' => 'entered2', 'qs' => $request->query()], 200);
+        $serverToken = env('DIAG_TOKEN');
+        $reqToken = (string) ($_GET['token'] ?? '');
+        $rawQs = $_SERVER['QUERY_STRING'] ?? null;
+        $getKeys = array_keys($_GET);
+
+        if (($_GET['_enter'] ?? null) === '1') {
+            return response()->json([
+                'ok' => true,
+                'stage' => 'entered2',
+                'qs' => $_GET,
+                'req_len' => strlen($reqToken),
+                'server_len' => strlen((string) $serverToken),
+                'raw_qs' => $rawQs,
+                'get_keys' => $getKeys,
+            ], 200);
         }
 
-        $serverToken = env('DIAG_TOKEN');
-        $reqToken = (string) $request->query('token', '');
         if (! $serverToken || ! $reqToken || ! hash_equals($serverToken, $reqToken)) {
             return response()->json([
                 'ok' => false,
@@ -176,6 +187,8 @@ class DebugCbpmrController extends Controller
                 'server_set' => (bool) $serverToken,
                 'server_len' => strlen((string) $serverToken),
                 'req_len' => strlen($reqToken),
+                'raw_qs' => $rawQs,
+                'get_keys' => $getKeys,
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
 
@@ -186,7 +199,7 @@ class DebugCbpmrController extends Controller
             ini_set('display_errors', '0');
             error_reporting(E_ALL & ~E_DEPRECATED);
 
-            $url = $request->query('url');
+            $url = $_GET['url'] ?? '';
             if (! is_string($url) || trim($url) === '') {
                 return response()->json([
                     'ok' => false,
@@ -280,7 +293,7 @@ class DebugCbpmrController extends Controller
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         } catch (\Throwable $e) {
             $logPath = storage_path('logs/last_exception.txt');
-            $urlParam = $request->query('url');
+            $urlParam = $_GET['url'] ?? null;
             $trace = Str::limit($e->getTraceAsString(), 2000, "\n...truncated...");
             $logMessage = implode("\n", [
                 '[' . now()->toDateTimeString() . '] cbpmr-parse exception',
