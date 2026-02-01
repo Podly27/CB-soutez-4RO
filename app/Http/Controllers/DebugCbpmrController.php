@@ -8,6 +8,17 @@ use Illuminate\Support\Str;
 
 class DebugCbpmrController extends Controller
 {
+    public function trace()
+    {
+        return response()->json([
+            'ok' => true,
+            'hit' => 'DebugCbpmrController@trace',
+            'app_env' => env('APP_ENV'),
+            'php' => PHP_VERSION,
+            'has_diag_token' => (bool) env('DIAG_TOKEN'),
+        ], 200);
+    }
+
     public function fetch(Request $request)
     {
         header('Content-Type: application/json; charset=utf-8');
@@ -154,6 +165,14 @@ class DebugCbpmrController extends Controller
         header('Content-Type: application/json; charset=utf-8');
         ini_set('display_errors', '0');
         error_reporting(E_ALL & ~E_DEPRECATED);
+
+        if ((string) $request->query('debug') === '1') {
+            return response()->json([
+                'ok' => true,
+                'stage' => 'entered',
+                'qs' => $request->query(),
+            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+        }
 
         $stage = 'start';
 

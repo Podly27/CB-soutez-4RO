@@ -79,10 +79,10 @@ $app->configure('view');
 */
 
 $app->middleware([
-    Illuminate\Cookie\Middleware\EncryptCookies::class,
-    Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-    Illuminate\Session\Middleware\StartSession::class,
-    Illuminate\View\Middleware\ShareErrorsFromSession::class,
+    App\Http\Middleware\EncryptCookiesWithDebugBypass::class,
+    App\Http\Middleware\AddQueuedCookiesToResponseWithDebugBypass::class,
+    App\Http\Middleware\StartSessionWithDebugBypass::class,
+    App\Http\Middleware\ShareErrorsFromSessionWithDebugBypass::class,
     App\Http\Middleware\ClientLocale::class,
 ]);
 
