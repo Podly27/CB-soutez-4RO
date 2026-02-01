@@ -72,6 +72,19 @@ class SubmissionController extends Controller
     public function processCbpmrInfo()
     {
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
+        $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
+        $shareToken = NULL;
+        if (preg_match('|/share/([^/?#]+)|', $this->diaryUrl, $matches)) {
+            $shareToken = $matches[1];
+        }
+        if ($shareToken) {
+            $payload = $this->fetchCbpmrInfoPayload($apiBaseUrl . $shareToken);
+            if ($payload) {
+                $this->applyCbpmrInfoPayload($payload);
+                return;
+            }
+        }
+
         $context = stream_context_create([
             'http' => [
                 'follow_location' => false,
@@ -90,11 +103,13 @@ class SubmissionController extends Controller
             ]);
             $html = file_get_contents($this->diaryUrl, false, $fallbackContext);
             if ($html === false) {
+                if ($shareToken) {
+                    throw new \RuntimeException('Failed to load CBPMR.info share page or API.');
+                }
                 throw new \RuntimeException('Failed to load CBPMR.info share page.');
             }
         }
 
-        $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
         $finalUrl = NULL;
         if (isset($http_response_header)) {
             foreach ($http_response_header as $header) {
@@ -119,10 +134,6 @@ class SubmissionController extends Controller
             $finalUrl = $apiBaseUrl . $matches[1];
         }
 
-        $shareToken = NULL;
-        if (preg_match('|/share/([^/?#]+)|', $this->diaryUrl, $matches)) {
-            $shareToken = $matches[1];
-        }
         if ($finalUrl === NULL && $shareToken) {
             $finalUrl = $apiBaseUrl . $shareToken;
         }
@@ -131,29 +142,11 @@ class SubmissionController extends Controller
             throw new \RuntimeException('Failed to resolve CBPMR.info API URL.');
         }
 
-        $auth = base64_encode(config('ctvero.cbpmrInfoApiAuthUsername') . ':' . config('ctvero.cbpmrInfoApiAuthPassword'));
-        $new_context = stream_context_create([
-            'http' => [
-                'header' => "Authorization: Basic {$auth}\r\nUser-Agent: Mozilla/5.0\r\n",
-                'timeout' => 10,
-            ],
-        ]);
-        $data = json_decode(file_get_contents($finalUrl, false, $new_context));
-        $payload = $data;
-        if (isset($data->data) && is_object($data->data)) {
-            $payload = $data->data;
-        }
-        $callSign = $payload->callName ?? $payload->callSign ?? $payload->call_sign ?? null;
-        $place = $payload->place ?? $payload->qthName ?? $payload->qth_name ?? null;
-        $locator = $payload->locator ?? $payload->qthLocator ?? $payload->qth_locator ?? null;
-        $totalCalls = $payload->totalCalls ?? $payload->total_calls ?? $payload->qsoCount ?? null;
-        if (! $payload || ! $callSign || ! $place || ! $locator || $totalCalls === null) {
+        $payload = $this->fetchCbpmrInfoPayload($finalUrl);
+        if (! $payload) {
             throw new \RuntimeException('Invalid CBPMR.info API response.');
         }
-        $this->callSign = $callSign;
-        $this->qthName = $place;
-        $this->qthLocator = $locator;
-        $this->qsoCount = $totalCalls;
+        $this->applyCbpmrInfoPayload($payload);
     }
 
     private function resolveCbpmrInfoApiBaseUrl(): string
@@ -169,6 +162,47 @@ class SubmissionController extends Controller
         }
 
         return Str::finish($apiUrl, '/');
+    }
+
+    private function fetchCbpmrInfoPayload(string $apiUrl): ?object
+    {
+        $auth = base64_encode(config('ctvero.cbpmrInfoApiAuthUsername') . ':' . config('ctvero.cbpmrInfoApiAuthPassword'));
+        $context = stream_context_create([
+            'http' => [
+                'header' => "Authorization: Basic {$auth}\r\nUser-Agent: Mozilla/5.0\r\n",
+                'timeout' => 10,
+            ],
+        ]);
+        $response = @file_get_contents($apiUrl, false, $context);
+        if ($response === false) {
+            return null;
+        }
+        $data = json_decode($response);
+        if (! $data) {
+            return null;
+        }
+        if (isset($data->data) && is_object($data->data)) {
+            return $data->data;
+        }
+        if (is_object($data)) {
+            return $data;
+        }
+        return null;
+    }
+
+    private function applyCbpmrInfoPayload(object $payload): void
+    {
+        $callSign = $payload->callName ?? $payload->callSign ?? $payload->call_sign ?? null;
+        $place = $payload->place ?? $payload->qthName ?? $payload->qth_name ?? null;
+        $locator = $payload->locator ?? $payload->qthLocator ?? $payload->qth_locator ?? null;
+        $totalCalls = $payload->totalCalls ?? $payload->total_calls ?? $payload->qsoCount ?? null;
+        if (! $callSign || ! $place || ! $locator || $totalCalls === null) {
+            throw new \RuntimeException('Invalid CBPMR.info API response.');
+        }
+        $this->callSign = $callSign;
+        $this->qthName = $place;
+        $this->qthLocator = $locator;
+        $this->qsoCount = $totalCalls;
     }
 
     public function show(Request $request, $resetStep = false)
