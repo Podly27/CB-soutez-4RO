@@ -1,0 +1,153 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Cbpmr;
+
+use DOMDocument;
+use DOMElement;
+use DOMNode;
+use DOMNodeList;
+use DOMXPath;
+
+class CbpmrShareService
+{
+    public function fetchHtml(string $url): array
+    {
+        /** @var CbpmrShareFetcher $fetcher */
+        $fetcher = app(CbpmrShareFetcher::class);
+        $fetchResult = $fetcher->fetch($url, ['use_cookies' => true]);
+
+        if (! $fetchResult['ok']) {
+            return [
+                'ok' => false,
+                'error' => $fetchResult['error'] ?? 'Fetch failed.',
+                'http_code' => $fetchResult['http_status'] ?? null,
+                'final_url' => $fetchResult['url'] ?? $url,
+                'redirect_chain' => $fetchResult['redirect_chain'] ?? [],
+                'content_type' => $fetchResult['content_type'] ?? null,
+                'body' => null,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'http_code' => $fetchResult['http_status'] ?? null,
+            'final_url' => $fetchResult['final_url'] ?? $url,
+            'redirect_chain' => $fetchResult['redirect_chain'] ?? [],
+            'content_type' => $fetchResult['content_type'] ?? null,
+            'body' => $fetchResult['body'] ?? '',
+        ];
+    }
+
+    public function parsePortableHtml(string $html, string $finalUrl): array
+    {
+        $xpath = $this->createXPath($html);
+
+        $myLocator = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="locator"]'));
+        $place = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="place"]'));
+        $qsoCountHeader = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="distance"]'));
+        $totalKm = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="km"]'));
+
+        $rows = $xpath->query('//table[@id="myTable"]//tbody//tr');
+        $entries = [];
+        $rowsFound = 0;
+
+        if ($rows instanceof DOMNodeList) {
+            foreach ($rows as $row) {
+                if (! $row instanceof DOMElement) {
+                    continue;
+                }
+
+                $rowsFound++;
+                $time = $this->normalizeText($this->textFromXPath($xpath, './td[2]', $row));
+                $name = $this->normalizeText($this->textFromXPath($xpath, './/span[contains(@class,"duplicity-name")]', $row));
+                $locator = $this->normalizeText($this->textFromXPath($xpath, './/span[contains(@class,"font-caption-locator-small")]', $row));
+                $kmText = $this->normalizeText($this->textFromXPath($xpath, './/p[contains(@class,"span-km")]', $row));
+                $note = $this->normalizeText($this->textFromXPath($xpath, './/br/following-sibling::span[contains(@class,"font-ariel")][1]', $row));
+
+                if ($note === '') {
+                    $note = $this->normalizeText($this->textFromXPath($xpath, './/span[contains(@class,"font-ariel")][last()]', $row));
+                }
+
+                $entry = [
+                    'time' => $time !== '' ? $time : null,
+                    'name' => $name !== '' ? $name : null,
+                    'locator' => $locator !== '' ? $locator : null,
+                    'km_int' => $this->extractInt($kmText),
+                ];
+
+                if ($note !== '') {
+                    $entry['note'] = $note;
+                }
+
+                $entries[] = $entry;
+            }
+        }
+
+        $portableId = $this->extractPortableId($finalUrl);
+
+        return [
+            'portable_id' => $portableId,
+            'my_locator' => $myLocator !== '' ? $myLocator : null,
+            'place' => $place !== '' ? $place : null,
+            'qso_count_header' => $qsoCountHeader !== '' ? $qsoCountHeader : null,
+            'total_km' => $totalKm !== '' ? $totalKm : null,
+            'rows_found' => $rowsFound,
+            'entries' => $entries,
+        ];
+    }
+
+    private function createXPath(string $html): DOMXPath
+    {
+        $html = preg_replace('/<meta charset="[^"]+">/i', '<meta charset="UTF-8">', $html);
+        $html = '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' . $html;
+
+        libxml_use_internal_errors(true);
+        $dom = new DOMDocument();
+        $dom->loadHTML($html, LIBXML_NOWARNING | LIBXML_NOERROR);
+        libxml_clear_errors();
+
+        return new DOMXPath($dom);
+    }
+
+    private function textFromXPath(DOMXPath $xpath, string $query, ?DOMElement $contextNode = null): ?string
+    {
+        $nodes = $contextNode ? $xpath->query($query, $contextNode) : $xpath->query($query);
+        $node = $nodes instanceof DOMNodeList ? $nodes->item(0) : null;
+        if (! $node instanceof DOMNode) {
+            return null;
+        }
+
+        return $node->textContent;
+    }
+
+    private function normalizeText(?string $value): string
+    {
+        $value = preg_replace('/\s+/u', ' ', $value ?? '');
+        return trim($value);
+    }
+
+    private function extractInt(?string $value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (preg_match('/(\d+)/', $value, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    private function extractPortableId(string $finalUrl): ?string
+    {
+        $path = parse_url($finalUrl, PHP_URL_PATH) ?? '';
+        if (preg_match('|/share/portable/(\\d+)|', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+}
