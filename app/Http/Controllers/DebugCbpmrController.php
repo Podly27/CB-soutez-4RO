@@ -162,7 +162,7 @@ class DebugCbpmrController extends Controller
 
     public function parse(\Laravel\Lumen\Http\Request $request)
     {
-        if ((string) $request->query('_enter') === '1') {
+        if ($request->query('_enter') === '1') {
             return response()->json(['ok' => true, 'stage' => 'entered2', 'qs' => $request->query()], 200);
         }
 
