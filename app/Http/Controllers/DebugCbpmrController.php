@@ -160,23 +160,23 @@ class DebugCbpmrController extends Controller
         }
     }
 
-    public function parse(Request $request, CbpmrShareService $service)
+    public function parse(Request $request)
     {
-        header('Content-Type: application/json; charset=utf-8');
-        ini_set('display_errors', '0');
-        error_reporting(E_ALL & ~E_DEPRECATED);
-
-        if ((string) $request->query('debug') === '1') {
-            return response()->json([
-                'ok' => true,
-                'stage' => 'entered',
-                'qs' => $request->query(),
-            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-        }
-
         $stage = 'start';
 
         try {
+            header('Content-Type: application/json; charset=utf-8');
+            ini_set('display_errors', '0');
+            error_reporting(E_ALL & ~E_DEPRECATED);
+
+            if ((string) $request->query('debug') === '1') {
+                return response()->json([
+                    'ok' => true,
+                    'stage' => 'entered',
+                    'qs' => $request->query(),
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
             $serverToken = env('DIAG_TOKEN');
             $reqToken = (string) $request->query('token', '');
 
@@ -213,8 +213,15 @@ class DebugCbpmrController extends Controller
                     'ok' => false,
                     'error' => 'invalid_host',
                     'stage' => $stage,
+                    'http_code' => null,
+                    'final_url' => null,
+                    'redirect_chain' => null,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
+
+            $stage = 'resolve_service';
+            /** @var CbpmrShareService $service */
+            $service = app(CbpmrShareService::class);
 
             $stage = 'fetch';
             $fetchResult = $service->fetch($url);
