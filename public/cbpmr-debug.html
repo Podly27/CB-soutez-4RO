@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CBPMR.info Debugger</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #38bdf8;
+      --error: #f87171;
+      --success: #34d399;
+      --warning: #fbbf24;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    p {
+      color: var(--muted);
+      margin: 0 0 24px;
+      line-height: 1.5;
+    }
+
+    form {
+      display: grid;
+      gap: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-weight: 600;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="url"] {
+      background: #0b1220;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    .grid-2 {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 18px;
+      background: var(--accent);
+      color: #082f49;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .log {
+      margin-top: 24px;
+      background: #020617;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 16px;
+      min-height: 240px;
+      font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    .entry {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .entry:last-child {
+      margin-bottom: 0;
+    }
+
+    .timestamp {
+      color: var(--muted);
+      min-width: 86px;
+    }
+
+    .level-info { color: var(--text); }
+    .level-error { color: var(--error); }
+    .level-success { color: var(--success); }
+    .level-warning { color: var(--warning); }
+
+    .helper {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CBPMR.info Debugger</h1>
+    <p>
+      Zadejte ručně všechny potřebné proměnné a spusťte test. Každý krok se vypíše jako log,
+      aby bylo možné dohledat problém v procesu načítání CBPMR.info.
+    </p>
+
+    <form id="debug-form">
+      <label>
+        Share URL
+        <input type="url" id="share-url" name="share-url" placeholder="https://www.cbpmr.info/share/..." required />
+        <span class="helper">URL odkazu /share, který chcete otestovat.</span>
+      </label>
+
+      <label>
+        API Base URL
+        <input type="url" id="api-url" name="api-url" placeholder="https://www.cbpmr.info/api/share/" required />
+        <span class="helper">Očekávaná hodnota CTVERO_CBPMR_INFO_API_URL.</span>
+      </label>
+
+      <div class="grid-2">
+        <label>
+          API Username
+          <input type="text" id="api-username" name="api-username" placeholder="CTVERO_CBPMR_INFO_API_AUTH_USERNAME" />
+        </label>
+        <label>
+          API Password
+          <input type="password" id="api-password" name="api-password" placeholder="CTVERO_CBPMR_INFO_API_AUTH_PASSWORD" />
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Spustit debug</button>
+        <button type="button" class="secondary" id="clear-log">Vymazat log</button>
+      </div>
+    </form>
+
+    <section class="log" id="log-output" aria-live="polite"></section>
+  </main>
+
+  <script>
+    const logOutput = document.getElementById('log-output');
+    const form = document.getElementById('debug-form');
+    const clearButton = document.getElementById('clear-log');
+
+    function log(message, level = 'info') {
+      const entry = document.createElement('div');
+      entry.className = 'entry';
+
+      const timestamp = document.createElement('span');
+      timestamp.className = 'timestamp';
+      timestamp.textContent = new Date().toLocaleTimeString();
+
+      const text = document.createElement('span');
+      text.className = `level-${level}`;
+      text.textContent = message;
+
+      entry.append(timestamp, text);
+      logOutput.appendChild(entry);
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+
+    function clearLog() {
+      logOutput.innerHTML = '';
+    }
+
+    function normalizeApiBaseUrl(value) {
+      let apiBaseUrl = value.trim();
+      if (!apiBaseUrl) {
+        return '';
+      }
+      apiBaseUrl = apiBaseUrl.replace(/^http:/i, 'https:');
+      if (!apiBaseUrl.includes('/api/') && apiBaseUrl.includes('/share/')) {
+        apiBaseUrl = apiBaseUrl.replace('/share/', '/api/share/');
+      }
+      if (!apiBaseUrl.endsWith('/')) {
+        apiBaseUrl += '/';
+      }
+      return apiBaseUrl;
+    }
+
+    function extractShareToken(shareUrl) {
+      const match = shareUrl.match(/\/share\/([^/?#]+)/);
+      return match ? match[1] : null;
+    }
+
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        return response;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function tryApiFetch(apiUrl, username, password) {
+      log(`API request: ${apiUrl}`);
+
+      const headers = new Headers();
+      if (username || password) {
+        const encoded = btoa(`${username}:${password}`);
+        headers.set('Authorization', `Basic ${encoded}`);
+      }
+
+      try {
+        const response = await fetchWithTimeout(apiUrl, { headers });
+        log(`API response status: ${response.status} ${response.statusText}`);
+
+        const text = await response.text();
+        log(`API raw response (${text.length} znaků)`);
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          log(`API JSON parse error: ${error.message}`, 'error');
+          return null;
+        }
+
+        const payload = data.data && typeof data.data === 'object' ? data.data : data;
+        if (!payload || typeof payload !== 'object') {
+          log('API payload není objekt.', 'error');
+          return null;
+        }
+
+        const callSign = payload.callName ?? payload.callSign ?? payload.call_sign ?? null;
+        const qthName = payload.place ?? payload.qthName ?? payload.qth_name ?? null;
+        const qthLocator = payload.locator ?? payload.qthLocator ?? payload.qth_locator ?? null;
+        const qsoCount = payload.totalCalls ?? payload.total_calls ?? payload.qsoCount ?? null;
+
+        log(`Payload klíče: ${Object.keys(payload).join(', ') || 'žádné'}`);
+        log(`callSign: ${callSign ?? 'nenalezeno'}`);
+        log(`qthName: ${qthName ?? 'nenalezeno'}`);
+        log(`qthLocator: ${qthLocator ?? 'nenalezeno'}`);
+        log(`qsoCount: ${qsoCount ?? 'nenalezeno'}`);
+
+        if (!callSign || !qthName || !qthLocator || qsoCount === null) {
+          log('API payload neobsahuje všechna povinná pole.', 'warning');
+        } else {
+          log('API payload obsahuje všechna povinná pole.', 'success');
+        }
+
+        return payload;
+      } catch (error) {
+        log(`API request error: ${error.message}`, 'error');
+        return null;
+      }
+    }
+
+    async function tryShareFallback(shareUrl) {
+      log('Fallback: načítám /share/ HTML stránku.', 'warning');
+      try {
+        const response = await fetchWithTimeout(shareUrl, { redirect: 'follow' });
+        log(`Share response status: ${response.status} ${response.statusText}`);
+        if (response.type === 'opaque') {
+          log('Share response je opaque (CORS).', 'warning');
+        }
+        const html = await response.text();
+        log(`HTML délka: ${html.length} znaků`);
+
+        const match = html.match(/\/share\/[^/]+\/(\d+)/);
+        if (match) {
+          log(`Nalezeno ID v HTML: ${match[1]}`);
+          return match[1];
+        }
+
+        log('ID se v HTML nepodařilo najít.', 'warning');
+        return null;
+      } catch (error) {
+        log(`Share request error: ${error.message}`, 'error');
+        return null;
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearLog();
+
+      const shareUrl = document.getElementById('share-url').value.trim();
+      const apiUrl = document.getElementById('api-url').value.trim();
+      const username = document.getElementById('api-username').value.trim();
+      const password = document.getElementById('api-password').value;
+
+      log('Start debug procesu.', 'success');
+
+      if (!shareUrl) {
+        log('Share URL není zadáno.', 'error');
+        return;
+      }
+
+      const apiBaseUrl = normalizeApiBaseUrl(apiUrl);
+      if (!apiBaseUrl) {
+        log('API Base URL není zadáno.', 'error');
+        return;
+      }
+
+      log(`Share URL: ${shareUrl}`);
+      log(`API Base URL (normalizováno): ${apiBaseUrl}`);
+
+      const shareToken = extractShareToken(shareUrl);
+      if (shareToken) {
+        log(`Share token: ${shareToken}`);
+      } else {
+        log('Share token se nepodařilo zjistit.', 'warning');
+      }
+
+      let apiPayload = null;
+      if (shareToken) {
+        apiPayload = await tryApiFetch(`${apiBaseUrl}${shareToken}`, username, password);
+      }
+
+      if (!apiPayload) {
+        const fallbackId = await tryShareFallback(shareUrl);
+        if (fallbackId) {
+          apiPayload = await tryApiFetch(`${apiBaseUrl}${fallbackId}`, username, password);
+        }
+      }
+
+      if (!apiPayload) {
+        log('Debug proces skončil bez validního payloadu.', 'error');
+        log('Pokud běží v prohlížeči, může být problém s CORS. Zkuste spustit tento krok ze serveru.', 'warning');
+      } else {
+        log('Debug proces dokončen.', 'success');
+      }
+    });
+
+    clearButton.addEventListener('click', clearLog);
+  </script>
+</body>
+</html>
