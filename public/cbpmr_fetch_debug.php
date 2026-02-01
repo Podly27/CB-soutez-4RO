@@ -5,16 +5,33 @@ ini_set('display_errors', '1');
 error_reporting(E_ALL);
 
 try {
-    require __DIR__ . '/../vendor/autoload.php';
+    if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+        require __DIR__ . '/../vendor/autoload.php';
+    }
 
-    $server = getenv('DIAG_TOKEN') ?: ($_ENV['DIAG_TOKEN'] ?? null);
+    try {
+        $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/..');
+        $dotenv->safeLoad();
+    } catch (\Throwable $e) {
+        // ignore, fallback
+    }
+
+    $server = $_ENV['DIAG_TOKEN'] ?? $_SERVER['DIAG_TOKEN'] ?? (getenv('DIAG_TOKEN') ?: null);
     $req = $_GET['token'] ?? '';
     if (!$server || !$req || !hash_equals($server, $req)) {
+        $envKeys = ['DIAG_TOKEN'];
+        $envPresent = array_values(array_intersect($envKeys, array_keys($_ENV)));
+        $serverPresent = array_values(array_intersect($envKeys, array_keys($_SERVER)));
+        $getenvPresent = getenv('DIAG_TOKEN') !== false ? ['DIAG_TOKEN'] : [];
+
         echo json_encode([
             'ok' => false,
             'error' => 'forbidden',
             'server_token_set' => (bool) $server,
             'req_token_len' => strlen($req),
+            'env_keys_present' => $envPresent,
+            'server_keys_present' => $serverPresent,
+            'getenv_keys_present' => $getenvPresent,
         ], JSON_UNESCAPED_SLASHES);
         exit;
     }
