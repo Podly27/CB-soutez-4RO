@@ -6,8 +6,8 @@
 RewriteEngine On
 
 RewriteCond %{HTTPS} off
-RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,QSA]
 
-RewriteRule ^static/(.*) /public/static/$1 [L]
-RewriteRule ^(favicon\.ico)$ /public/static/$1 [L]
-RewriteRule ^ /public/ [L]
+RewriteRule ^static/(.*) /public/static/$1 [L,QSA]
+RewriteRule ^(favicon\.ico)$ /public/static/$1 [L,QSA]
+RewriteRule ^ /public/ [L,QSA]
