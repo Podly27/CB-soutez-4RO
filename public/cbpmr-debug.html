@@ -139,8 +139,7 @@
   <main>
     <h1>CBPMR.info Debugger</h1>
     <p>
-      Zadejte ručně všechny potřebné proměnné a spusťte test. Každý krok se vypíše jako log,
-      aby bylo možné dohledat problém v procesu načítání CBPMR.info.
+      Zadejte share URL a diagnostický token. Debug běží server-side, takže se vyhneme CORS chybám.
     </p>
 
     <form id="debug-form">
@@ -151,21 +150,10 @@
       </label>
 
       <label>
-        API Base URL
-        <input type="url" id="api-url" name="api-url" placeholder="https://www.cbpmr.info/api/share/" required />
-        <span class="helper">Očekávaná hodnota CTVERO_CBPMR_INFO_API_URL.</span>
+        DIAG Token
+        <input type="password" id="diag-token" name="diag-token" placeholder="DIAG_TOKEN" required />
+        <span class="helper">Token pro /_debug/cbpmr-fetch endpoint.</span>
       </label>
-
-      <div class="grid-2">
-        <label>
-          API Username
-          <input type="text" id="api-username" name="api-username" placeholder="CTVERO_CBPMR_INFO_API_AUTH_USERNAME" />
-        </label>
-        <label>
-          API Password
-          <input type="password" id="api-password" name="api-password" placeholder="CTVERO_CBPMR_INFO_API_AUTH_PASSWORD" />
-        </label>
-      </div>
 
       <div class="actions">
         <button type="submit">Spustit debug</button>
@@ -202,39 +190,6 @@
       logOutput.innerHTML = '';
     }
 
-    function normalizeApiBaseUrl(value) {
-      let apiBaseUrl = value.trim();
-      if (!apiBaseUrl) {
-        return '';
-      }
-      apiBaseUrl = apiBaseUrl.replace(/^http:/i, 'https:');
-      if (!apiBaseUrl.includes('/api/') && apiBaseUrl.includes('/share/')) {
-        apiBaseUrl = apiBaseUrl.replace('/share/', '/api/share/');
-      }
-      if (!apiBaseUrl.endsWith('/')) {
-        apiBaseUrl += '/';
-      }
-      return apiBaseUrl;
-    }
-
-    function extractShareToken(shareUrl) {
-      const match = shareUrl.match(/\/share\/([^/?#]+)/);
-      return match ? match[1] : null;
-    }
-
-    function logOriginWarning(label, urlValue) {
-      try {
-        const currentOrigin = window.location.origin;
-        const targetOrigin = new URL(urlValue).origin;
-        if (currentOrigin !== targetOrigin) {
-          log(`${label} míří na jinou doménu (${targetOrigin}) než stránka (${currentOrigin}).`, 'warning');
-          log('Při volání z prohlížeče může selhat CORS (NetworkError). Spusťte debug z té samé domény nebo přes serverový proxy.', 'warning');
-        }
-      } catch (error) {
-        log(`Nepodařilo se vyhodnotit origin ${label}: ${error.message}`, 'warning');
-      }
-    }
-
     async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -246,82 +201,21 @@
       }
     }
 
-    async function tryApiFetch(apiUrl, username, password) {
-      log(`API request: ${apiUrl}`);
-
-      const headers = new Headers();
-      if (username || password) {
-        const encoded = btoa(`${username}:${password}`);
-        headers.set('Authorization', `Basic ${encoded}`);
+    function logParsedPreview(preview) {
+      if (!preview) {
+        log('parsed_preview není k dispozici.', 'warning');
+        return;
       }
 
-      try {
-        const response = await fetchWithTimeout(apiUrl, { headers });
-        log(`API response status: ${response.status} ${response.statusText}`);
+      log(`qso_count: ${preview.qso_count ?? 'n/a'}`);
+      log(`my_locator: ${preview.my_locator ?? 'n/a'}`);
 
-        const text = await response.text();
-        log(`API raw response (${text.length} znaků)`);
-
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (error) {
-          log(`API JSON parse error: ${error.message}`, 'error');
-          return null;
-        }
-
-        const payload = data.data && typeof data.data === 'object' ? data.data : data;
-        if (!payload || typeof payload !== 'object') {
-          log('API payload není objekt.', 'error');
-          return null;
-        }
-
-        const callSign = payload.callName ?? payload.callSign ?? payload.call_sign ?? null;
-        const qthName = payload.place ?? payload.qthName ?? payload.qth_name ?? null;
-        const qthLocator = payload.locator ?? payload.qthLocator ?? payload.qth_locator ?? null;
-        const qsoCount = payload.totalCalls ?? payload.total_calls ?? payload.qsoCount ?? null;
-
-        log(`Payload klíče: ${Object.keys(payload).join(', ') || 'žádné'}`);
-        log(`callSign: ${callSign ?? 'nenalezeno'}`);
-        log(`qthName: ${qthName ?? 'nenalezeno'}`);
-        log(`qthLocator: ${qthLocator ?? 'nenalezeno'}`);
-        log(`qsoCount: ${qsoCount ?? 'nenalezeno'}`);
-
-        if (!callSign || !qthName || !qthLocator || qsoCount === null) {
-          log('API payload neobsahuje všechna povinná pole.', 'warning');
-        } else {
-          log('API payload obsahuje všechna povinná pole.', 'success');
-        }
-
-        return payload;
-      } catch (error) {
-        log(`API request error: ${error.message}`, 'error');
-        return null;
-      }
-    }
-
-    async function tryShareFallback(shareUrl) {
-      log('Fallback: načítám /share/ HTML stránku.', 'warning');
-      try {
-        const response = await fetchWithTimeout(shareUrl, { redirect: 'follow' });
-        log(`Share response status: ${response.status} ${response.statusText}`);
-        if (response.type === 'opaque') {
-          log('Share response je opaque (CORS).', 'warning');
-        }
-        const html = await response.text();
-        log(`HTML délka: ${html.length} znaků`);
-
-        const match = html.match(/\/share\/[^/]+\/(\d+)/);
-        if (match) {
-          log(`Nalezeno ID v HTML: ${match[1]}`);
-          return match[1];
-        }
-
-        log('ID se v HTML nepodařilo najít.', 'warning');
-        return null;
-      } catch (error) {
-        log(`Share request error: ${error.message}`, 'error');
-        return null;
+      if (Array.isArray(preview.first_rows) && preview.first_rows.length > 0) {
+        preview.first_rows.forEach((row, index) => {
+          log(`řádek ${index + 1}: ${row.time ?? '-'} | ${row.name ?? '-'} | ${row.locator ?? '-'} | ${row.km ?? '-'}`);
+        });
+      } else {
+        log('first_rows je prázdné.', 'warning');
       }
     }
 
@@ -330,9 +224,7 @@
       clearLog();
 
       const shareUrl = document.getElementById('share-url').value.trim();
-      const apiUrl = document.getElementById('api-url').value.trim();
-      const username = document.getElementById('api-username').value.trim();
-      const password = document.getElementById('api-password').value;
+      const token = document.getElementById('diag-token').value.trim();
 
       log('Start debug procesu.', 'success');
 
@@ -341,41 +233,40 @@
         return;
       }
 
-      const apiBaseUrl = normalizeApiBaseUrl(apiUrl);
-      if (!apiBaseUrl) {
-        log('API Base URL není zadáno.', 'error');
+      if (!token) {
+        log('DIAG token není zadán.', 'error');
         return;
       }
 
       log(`Share URL: ${shareUrl}`);
-      log(`API Base URL (normalizováno): ${apiBaseUrl}`);
-      logOriginWarning('Share URL', shareUrl);
-      logOriginWarning('API Base URL', apiBaseUrl);
 
-      const shareToken = extractShareToken(shareUrl);
-      if (shareToken) {
-        log(`Share token: ${shareToken}`);
-      } else {
-        log('Share token se nepodařilo zjistit.', 'warning');
-      }
+      const debugUrl = `/_debug/cbpmr-fetch?token=${encodeURIComponent(token)}&url=${encodeURIComponent(shareUrl)}`;
+      log(`Server-side debug: ${debugUrl}`);
 
-      let apiPayload = null;
-      if (shareToken) {
-        apiPayload = await tryApiFetch(`${apiBaseUrl}${shareToken}`, username, password);
-      }
+      try {
+        const response = await fetchWithTimeout(debugUrl);
+        log(`Debug response status: ${response.status} ${response.statusText}`);
 
-      if (!apiPayload) {
-        const fallbackId = await tryShareFallback(shareUrl);
-        if (fallbackId) {
-          apiPayload = await tryApiFetch(`${apiBaseUrl}${fallbackId}`, username, password);
+        const payload = await response.json();
+        if (!payload.ok) {
+          log(`Debug error: ${payload.error ?? 'unknown error'}`, 'error');
+          log(`code: ${payload.code ?? 'n/a'}`);
+          log(`url: ${payload.url ?? 'n/a'}`);
+          return;
         }
-      }
 
-      if (!apiPayload) {
-        log('Debug proces skončil bez validního payloadu.', 'error');
-        log('Pokud běží v prohlížeči, může být problém s CORS. Zkuste spustit tento krok ze serveru.', 'warning');
-      } else {
+        log(`final_url: ${payload.final_url ?? 'n/a'}`);
+        log(`http_status: ${payload.http_status ?? 'n/a'}`);
+        log(`content_type: ${payload.content_type ?? 'n/a'}`);
+        log(`body_length: ${payload.body_length ?? 'n/a'}`);
+        log(`title: ${payload.title ?? 'n/a'}`);
+        log(`detected_format: ${payload.detected_format ?? 'n/a'}`);
+        log(`body_snippet: ${payload.body_snippet ?? ''}`);
+        logParsedPreview(payload.parsed_preview);
+
         log('Debug proces dokončen.', 'success');
+      } catch (error) {
+        log(`Debug request error: ${error.message}`, 'error');
       }
     });
 

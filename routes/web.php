@@ -1,5 +1,7 @@
 <?php
 
+use App\Services\Cbpmr\CbpmrShareFetcher;
+use App\Services\Cbpmr\CbpmrShareParser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 /** @var \Laravel\Lumen\Routing\Router $router */
@@ -144,6 +146,63 @@ $router->get('/_debug/response', function () {
     }
 
     return response()->json(['ok' => true], 200);
+});
+
+$router->get('/_debug/cbpmr-fetch', function () {
+    $token = env('DIAG_TOKEN');
+    $requestToken = request()->query('token');
+
+    if (! $token || $requestToken !== $token) {
+        return response()->json(['ok' => false, 'error' => 'Forbidden.'], 403);
+    }
+
+    $url = request()->query('url');
+    if (! is_string($url) || trim($url) === '') {
+        return response()->json(['ok' => false, 'error' => 'Missing url.'], 400);
+    }
+
+    $parsed = parse_url($url);
+    $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
+    $path = is_array($parsed) ? ($parsed['path'] ?? '') : '';
+
+    $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
+    if (! in_array($host, $allowedHosts, true) || ! Str::startsWith($path, '/share/')) {
+        return response()->json(['ok' => false, 'error' => 'Invalid URL.'], 400);
+    }
+
+    /** @var CbpmrShareFetcher $fetcher */
+    $fetcher = app(CbpmrShareFetcher::class);
+    $fetchResult = $fetcher->fetch($url);
+
+    if (! $fetchResult['ok']) {
+        return response()->json([
+            'ok' => false,
+            'error' => $fetchResult['error'] ?? 'Fetch failed.',
+            'code' => $fetchResult['code'] ?? null,
+            'url' => $fetchResult['url'] ?? $url,
+        ], 502);
+    }
+
+    $body = $fetchResult['body'] ?? '';
+    $bodyLength = strlen($body);
+    $snippet = mb_substr($body, 0, 1000, 'UTF-8');
+    $snippet = trim($snippet);
+
+    /** @var CbpmrShareParser $parser */
+    $parser = app(CbpmrShareParser::class);
+    $parsedResult = $parser->parse($body);
+
+    return response()->json([
+        'ok' => true,
+        'final_url' => $fetchResult['final_url'] ?? $url,
+        'http_status' => $fetchResult['http_status'] ?? null,
+        'content_type' => $fetchResult['content_type'] ?? null,
+        'body_length' => $bodyLength,
+        'title' => $parsedResult['title'] ?? null,
+        'body_snippet' => $snippet,
+        'detected_format' => $parsedResult['detected_format'] ?? null,
+        'parsed_preview' => $parsedResult['parsed_preview'] ?? null,
+    ], 200);
 });
 
 $router->get('/_debug/routes-auth', function () {

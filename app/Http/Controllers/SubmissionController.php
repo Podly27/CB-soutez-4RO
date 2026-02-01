@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
+use App\Services\Cbpmr\CbpmrShareFetcher;
+use App\Services\Cbpmr\CbpmrShareParser;
 use App\Exceptions\SubmissionException;
 use App\Http\Utilities;
 use App\Models\Category;
@@ -73,6 +75,8 @@ class SubmissionController extends Controller
     {
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
         $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
+        $shareFetcher = app(CbpmrShareFetcher::class);
+        $shareParser = app(CbpmrShareParser::class);
         $shareToken = NULL;
         if (preg_match('|/share/([^/?#]+)|', $this->diaryUrl, $matches)) {
             $shareToken = $matches[1];
@@ -85,53 +89,26 @@ class SubmissionController extends Controller
             }
         }
 
-        $context = stream_context_create([
-            'http' => [
-                'follow_location' => false,
-                'header' => "User-Agent: Mozilla/5.0\r\n",
-                'timeout' => 10,
-            ],
-        ]);
-        $html = file_get_contents($this->diaryUrl, false, $context);
-        if ($html === false) {
-            $fallbackContext = stream_context_create([
-                'http' => [
-                    'follow_location' => true,
-                    'header' => "User-Agent: Mozilla/5.0\r\n",
-                    'timeout' => 10,
-                ],
-            ]);
-            $html = file_get_contents($this->diaryUrl, false, $fallbackContext);
-            if ($html === false) {
-                if ($shareToken) {
-                    throw new \RuntimeException('Failed to load CBPMR.info share page or API.');
-                }
-                throw new \RuntimeException('Failed to load CBPMR.info share page.');
+        $shareResponse = $shareFetcher->fetch($this->diaryUrl);
+        if (! $shareResponse['ok']) {
+            if ($shareToken) {
+                throw new \RuntimeException('Failed to load CBPMR.info share page or API.');
             }
+            throw new \RuntimeException('Failed to load CBPMR.info share page.');
         }
 
+        $html = $shareResponse['body'];
         $finalUrl = NULL;
-        if (isset($http_response_header)) {
-            foreach ($http_response_header as $header) {
-                if (preg_match('|^Location:\s*(\S+)|i', $header, $matches)) {
-                    $location = $matches[1];
-                    $locationPath = parse_url($location, PHP_URL_PATH) ?: $location;
-                    if (preg_match('|/share/[^/]+/(\d+)|', $locationPath, $idMatches)) {
-                        $diaryId = trim($idMatches[1]);
-                        $finalUrl = $apiBaseUrl . $diaryId;
-                        break;
-                    }
-                }
-                if (preg_match('|^Location: /share/[^/]+/\d+|', $header)) {
-                    $diaryId = trim(preg_replace('|.*/share/[^/]+/(\d+).*|', '$1', $header));
-                    $finalUrl = $apiBaseUrl . $diaryId;
-                    break;
-                }
-            }
+        $resolvedFromFinalUrl = $this->resolveShareIdFromUrl($shareResponse['final_url'] ?? null);
+        if ($resolvedFromFinalUrl) {
+            $finalUrl = $apiBaseUrl . $resolvedFromFinalUrl;
         }
 
-        if ($finalUrl === NULL && preg_match('|/share/[^/]+/(\d+)|', $html, $matches)) {
-            $finalUrl = $apiBaseUrl . $matches[1];
+        if ($finalUrl === NULL) {
+            $resolvedFromHtml = $shareParser->extractShareId($html);
+            if ($resolvedFromHtml) {
+                $finalUrl = $apiBaseUrl . $resolvedFromHtml;
+            }
         }
 
         if ($finalUrl === NULL && $shareToken) {
@@ -162,6 +139,20 @@ class SubmissionController extends Controller
         }
 
         return Str::finish($apiUrl, '/');
+    }
+
+    private function resolveShareIdFromUrl(?string $url): ?string
+    {
+        if (! $url) {
+            return null;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: $url;
+        if (preg_match('|/share/[^/]+/(\\d+)|', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
     }
 
     private function fetchCbpmrInfoPayload(string $apiUrl): ?object
