@@ -1,7 +1,5 @@
 <?php
 
-use App\Services\Cbpmr\CbpmrShareFetcher;
-use App\Services\Cbpmr\CbpmrShareParser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 /** @var \Laravel\Lumen\Routing\Router $router */
@@ -148,124 +146,7 @@ $router->get('/_debug/response', function () {
     return response()->json(['ok' => true], 200);
 });
 
-$router->get('/_debug/cbpmr-fetch', function () {
-    $jsonResponse = static function (array $payload, int $status = 200) {
-        return response()
-            ->json($payload, $status)
-            ->header('Content-Type', 'application/json; charset=utf-8');
-    };
-
-    $stage = 'init';
-
-    try {
-        $stage = 'validate';
-        $serverToken = env('DIAG_TOKEN') ?: env('DIAGTOKEN') ?: env('DIAG_SECRET') ?: env('DEBUG_TOKEN');
-        $reqToken = (string) request('token');
-
-        if (! $serverToken || ! $reqToken || ! hash_equals($serverToken, $reqToken)) {
-            return $jsonResponse([
-                'ok' => false,
-                'error' => 'forbidden',
-                'stage' => $stage,
-                'server_token_set' => (bool) $serverToken,
-                'server_token_len' => strlen((string) $serverToken),
-                'req_token_len' => strlen($reqToken),
-                'req_has_url' => (bool) request('url'),
-            ], 200);
-        }
-
-        $url = request()->query('url');
-        if (! is_string($url) || trim($url) === '') {
-            return $jsonResponse(['ok' => false, 'error' => 'missing_url', 'stage' => $stage], 200);
-        }
-
-        $parsed = parse_url($url);
-        $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
-        $path = is_array($parsed) ? ($parsed['path'] ?? '') : '';
-
-        $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
-        if (! in_array($host, $allowedHosts, true) || ! Str::startsWith($path, '/share/')) {
-            return $jsonResponse(['ok' => false, 'error' => 'invalid_host', 'stage' => $stage], 200);
-        }
-
-        /** @var CbpmrShareFetcher $fetcher */
-        $stage = 'fetch';
-        $fetcher = app(CbpmrShareFetcher::class);
-        $fetchResult = $fetcher->fetch($url);
-
-        if (! $fetchResult['ok']) {
-            return $jsonResponse([
-                'ok' => false,
-                'error' => 'fetch_failed',
-                'message' => $fetchResult['error'] ?? 'Fetch failed.',
-                'code' => $fetchResult['code'] ?? null,
-                'url' => $fetchResult['url'] ?? $url,
-                'http_status' => $fetchResult['http_status'] ?? null,
-                'stage' => $stage,
-            ], 200);
-        }
-
-        $body = $fetchResult['body'] ?? '';
-        $bodyLength = strlen($body);
-        $snippet = mb_substr($body, 0, 1000, 'UTF-8');
-        $snippet = trim($snippet);
-        $httpStatus = $fetchResult['http_status'] ?? null;
-
-        if (is_numeric($httpStatus) && (int) $httpStatus >= 400) {
-            $errorSnippet = mb_substr($body, 0, 500, 'UTF-8');
-            return $jsonResponse([
-                'ok' => false,
-                'error' => 'http_error',
-                'http_status' => (int) $httpStatus,
-                'response_snippet' => trim($errorSnippet),
-                'stage' => $stage,
-            ], 200);
-        }
-
-        /** @var CbpmrShareParser $parser */
-        $stage = 'parse';
-        $parser = app(CbpmrShareParser::class);
-        $parsedResult = $parser->parse($body);
-
-        $stage = 'return';
-        return $jsonResponse([
-            'ok' => true,
-            'stage' => $stage,
-            'final_url' => $fetchResult['final_url'] ?? $url,
-            'http_status' => $httpStatus,
-            'content_type' => $fetchResult['content_type'] ?? null,
-            'body_length' => $bodyLength,
-            'title' => $parsedResult['title'] ?? null,
-            'body_snippet' => $snippet,
-            'detected_format' => $parsedResult['detected_format'] ?? null,
-            'parsed_preview' => $parsedResult['parsed_preview'] ?? null,
-        ], 200);
-    } catch (\Throwable $e) {
-        $urlParam = request()->query('url');
-        $logPath = storage_path('logs/last_exception.txt');
-        $trace = Str::limit($e->getTraceAsString(), 2000, "\n...truncated...");
-        $logMessage = implode("\n", [
-            '[' . now()->toDateTimeString() . '] cbpmr-fetch exception',
-            'stage: ' . $stage,
-            'message: ' . $e->getMessage(),
-            'location: ' . $e->getFile() . ':' . $e->getLine(),
-            'url_param: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
-            'trace:',
-            $trace,
-            '',
-        ]);
-        @file_put_contents($logPath, $logMessage, FILE_APPEND);
-
-        return $jsonResponse([
-            'ok' => false,
-            'error' => 'exception',
-            'class' => get_class($e),
-            'message' => $e->getMessage(),
-            'location' => $e->getFile() . ':' . $e->getLine(),
-            'stage' => $stage,
-        ], 200);
-    }
-});
+$router->get('/_debug/cbpmr-fetch', 'DebugCbpmrController@fetch');
 
 $router->get('/_debug/routes-auth', function () {
     $token = env('DIAG_TOKEN');
