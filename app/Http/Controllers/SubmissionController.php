@@ -74,13 +74,29 @@ class SubmissionController extends Controller
     public function processCbpmrInfo()
     {
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
-        $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
         $shareFetcher = app(CbpmrShareFetcher::class);
         $shareParser = app(CbpmrShareParser::class);
         $shareToken = NULL;
+        $portableId = $this->extractPortableIdFromPath(parse_url($this->diaryUrl, PHP_URL_PATH) ?: '');
+        if ($portableId) {
+            $this->importCbpmrPortableDiary($this->buildPortableUrl($portableId), [
+                'original_url' => $this->diaryUrl,
+                'extracted_portable_id' => $portableId,
+            ]);
+            return;
+        }
+
         if (preg_match('|/share/([^/?#]+)|', $this->diaryUrl, $matches)) {
             $shareToken = $matches[1];
         }
+
+        $isTokenUrl = $shareToken && $shareToken !== 'portable' && ! ctype_digit($shareToken);
+        if ($isTokenUrl) {
+            $this->processCbpmrInfoTokenUrl($shareFetcher, $shareParser);
+            return;
+        }
+
+        $apiBaseUrl = $this->resolveCbpmrInfoApiBaseUrl();
         if ($shareToken) {
             $payload = $this->fetchCbpmrInfoPayload($apiBaseUrl . $shareToken);
             if ($payload) {
@@ -91,6 +107,14 @@ class SubmissionController extends Controller
 
         $shareResponse = $shareFetcher->fetch($this->diaryUrl);
         if (! $shareResponse['ok']) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $this->diaryUrl,
+                'final_url' => $shareResponse['url'] ?? null,
+                'http_code' => $shareResponse['http_status'] ?? null,
+                'title' => null,
+                'found_rows_count' => null,
+                'extracted_portable_id' => null,
+            ]);
             if ($shareToken) {
                 throw new \RuntimeException('Failed to load CBPMR.info share page or API.');
             }
@@ -116,11 +140,27 @@ class SubmissionController extends Controller
         }
 
         if ($finalUrl === NULL) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $this->diaryUrl,
+                'final_url' => null,
+                'http_code' => $shareResponse['http_status'] ?? null,
+                'title' => null,
+                'found_rows_count' => null,
+                'extracted_portable_id' => null,
+            ]);
             throw new \RuntimeException('Failed to resolve CBPMR.info API URL.');
         }
 
         $payload = $this->fetchCbpmrInfoPayload($finalUrl);
         if (! $payload) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $this->diaryUrl,
+                'final_url' => $finalUrl,
+                'http_code' => null,
+                'title' => null,
+                'found_rows_count' => null,
+                'extracted_portable_id' => null,
+            ]);
             throw new \RuntimeException('Invalid CBPMR.info API response.');
         }
         $this->applyCbpmrInfoPayload($payload);
@@ -155,6 +195,123 @@ class SubmissionController extends Controller
         return null;
     }
 
+    private function processCbpmrInfoTokenUrl(CbpmrShareFetcher $shareFetcher, CbpmrShareParser $shareParser): void
+    {
+        $originalUrl = $this->diaryUrl;
+        $shareResponse = $shareFetcher->fetch($originalUrl);
+        if (! $shareResponse['ok']) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $originalUrl,
+                'final_url' => $shareResponse['url'] ?? null,
+                'http_code' => $shareResponse['http_status'] ?? null,
+                'title' => null,
+                'found_rows_count' => null,
+                'extracted_portable_id' => null,
+            ]);
+            throw new \RuntimeException('Failed to load CBPMR.info share page.');
+        }
+
+        $html = $shareResponse['body'] ?? '';
+        $finalUrl = $shareResponse['final_url'] ?? null;
+        $httpStatus = $shareResponse['http_status'] ?? null;
+        $portableParse = $shareParser->parsePortable($html);
+        $title = $portableParse['title'] ?? null;
+        $foundRowsCount = $portableParse['found_rows_count'] ?? null;
+        $hasTable = $portableParse['has_table'] ?? false;
+
+        if ($hasTable) {
+            try {
+                $this->applyCbpmrPortablePayload($portableParse, $originalUrl);
+                return;
+            } catch (\RuntimeException $e) {
+                $this->logCbpmrShareFailure([
+                    'original_url' => $originalUrl,
+                    'final_url' => $finalUrl,
+                    'http_code' => $httpStatus,
+                    'title' => $title,
+                    'found_rows_count' => $foundRowsCount,
+                    'extracted_portable_id' => null,
+                ]);
+            }
+        }
+
+        $finalPath = parse_url((string) $finalUrl, PHP_URL_PATH) ?? '';
+        $isErrorPath = Str::endsWith($finalPath, '/share/error');
+
+        $portableId = null;
+        if ($isErrorPath || ! $hasTable) {
+            $portableId = $this->extractPortableIdFromQuery($finalUrl);
+            if (! $portableId) {
+                $portableId = $this->extractPortableIdFromHtml($html);
+            }
+            if (! $portableId) {
+                $portableId = $this->extractPortableIdFromPortableLinks($html);
+            }
+        }
+
+        if ($portableId) {
+            $portableUrl = $this->buildPortableUrl($portableId);
+            $this->diaryUrl = $portableUrl;
+            $this->importCbpmrPortableDiary($portableUrl, [
+                'original_url' => $originalUrl,
+                'final_url' => $finalUrl,
+                'http_code' => $httpStatus,
+                'title' => $title,
+                'found_rows_count' => $foundRowsCount,
+                'extracted_portable_id' => $portableId,
+            ]);
+            return;
+        }
+
+        $this->logCbpmrShareFailure([
+            'original_url' => $originalUrl,
+            'final_url' => $finalUrl,
+            'http_code' => $httpStatus,
+            'title' => $title,
+            'found_rows_count' => $foundRowsCount,
+            'extracted_portable_id' => null,
+            'body_snippet' => $this->snippetHtml($html),
+        ]);
+        throw new SubmissionException(422, [
+            __('Odkaz (token) se nepodařilo převést. Prosím pošlete odkaz ve formátu https://www.cbpmr.info/share/portable/XXXX.'),
+        ]);
+    }
+
+    private function importCbpmrPortableDiary(string $url, array $context): void
+    {
+        $shareFetcher = app(CbpmrShareFetcher::class);
+        $shareParser = app(CbpmrShareParser::class);
+        $shareResponse = $shareFetcher->fetch($url);
+        if (! $shareResponse['ok']) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $context['original_url'] ?? $url,
+                'final_url' => $shareResponse['url'] ?? null,
+                'http_code' => $shareResponse['http_status'] ?? null,
+                'title' => null,
+                'found_rows_count' => null,
+                'extracted_portable_id' => $context['extracted_portable_id'] ?? null,
+            ]);
+            throw new \RuntimeException('Failed to load CBPMR.info portable page.');
+        }
+
+        $html = $shareResponse['body'] ?? '';
+        $portableParse = $shareParser->parsePortable($html);
+
+        try {
+            $this->applyCbpmrPortablePayload($portableParse, $url);
+        } catch (\RuntimeException $e) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $context['original_url'] ?? $url,
+                'final_url' => $shareResponse['final_url'] ?? $url,
+                'http_code' => $shareResponse['http_status'] ?? null,
+                'title' => $portableParse['title'] ?? null,
+                'found_rows_count' => $portableParse['found_rows_count'] ?? null,
+                'extracted_portable_id' => $context['extracted_portable_id'] ?? null,
+            ]);
+            throw $e;
+        }
+    }
+
     private function fetchCbpmrInfoPayload(string $apiUrl): ?object
     {
         $auth = base64_encode(config('ctvero.cbpmrInfoApiAuthUsername') . ':' . config('ctvero.cbpmrInfoApiAuthPassword'));
@@ -181,6 +338,23 @@ class SubmissionController extends Controller
         return null;
     }
 
+    private function applyCbpmrPortablePayload(array $payload, string $sourceUrl): void
+    {
+        $callSign = $payload['call_sign'] ?? $payload['qth_name'] ?? $payload['title'] ?? null;
+        $place = $payload['qth_name'] ?? null;
+        $locator = $payload['qth_locator'] ?? null;
+        $totalCalls = $payload['qso_count'] ?? null;
+        if (! $callSign || ! $place || ! $locator || $totalCalls === null) {
+            throw new \RuntimeException('Invalid CBPMR.info portable response.');
+        }
+
+        $this->diaryUrl = $sourceUrl;
+        $this->callSign = $callSign;
+        $this->qthName = $place;
+        $this->qthLocator = $locator;
+        $this->qsoCount = $totalCalls;
+    }
+
     private function applyCbpmrInfoPayload(object $payload): void
     {
         $callSign = $payload->callName ?? $payload->callSign ?? $payload->call_sign ?? null;
@@ -194,6 +368,83 @@ class SubmissionController extends Controller
         $this->qthName = $place;
         $this->qthLocator = $locator;
         $this->qsoCount = $totalCalls;
+    }
+
+    private function extractPortableIdFromPath(string $path): ?string
+    {
+        if (preg_match('|/share/portable/(\\d+)|', $path, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    private function extractPortableIdFromQuery(?string $url): ?string
+    {
+        if (! $url) {
+            return null;
+        }
+
+        $query = parse_url($url, PHP_URL_QUERY);
+        if (! $query) {
+            return null;
+        }
+
+        parse_str($query, $params);
+        if (isset($params['startDiaryId']) && preg_match('/\\d+/', (string) $params['startDiaryId'])) {
+            return (string) $params['startDiaryId'];
+        }
+
+        return null;
+    }
+
+    private function extractPortableIdFromHtml(string $html): ?string
+    {
+        if (preg_match('/startDiaryId=(\\d+)/', $html, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    private function extractPortableIdFromPortableLinks(string $html): ?string
+    {
+        if (preg_match('|/share/portable/(\\d+)|', $html, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    private function buildPortableUrl(string $portableId): string
+    {
+        return 'https://www.cbpmr.info/share/portable/' . $portableId;
+    }
+
+    private function snippetHtml(string $html): ?string
+    {
+        $snippet = trim(mb_substr($html, 0, 500, 'UTF-8'));
+        return $snippet !== '' ? $snippet : null;
+    }
+
+    private function logCbpmrShareFailure(array $context): void
+    {
+        $payload = [
+            'timestamp: ' . date(DATE_ATOM),
+            'original_url: ' . ($context['original_url'] ?? ''),
+            'final_url: ' . ($context['final_url'] ?? ''),
+            'http_code: ' . ($context['http_code'] ?? ''),
+            'title: ' . ($context['title'] ?? ''),
+            'found_rows_count: ' . ($context['found_rows_count'] ?? ''),
+            'extracted_portable_id: ' . ($context['extracted_portable_id'] ?? ''),
+        ];
+
+        if (! empty($context['body_snippet'])) {
+            $payload[] = 'body_snippet: ' . $context['body_snippet'];
+        }
+
+        $message = implode("\n", $payload);
+        @file_put_contents(storage_path('logs/last_exception.txt'), $message);
     }
 
     public function show(Request $request, $resetStep = false)
@@ -229,6 +480,8 @@ class SubmissionController extends Controller
                     $this->diaryUrl = $diaryUrl;
                     try {
                         $this->$processor();
+                    } catch (SubmissionException $e) {
+                        throw $e;
                     } catch (\Exception $e) {
                         throw new SubmissionException(500, array(__('Deník se nepodařilo načíst.')));
                     }
