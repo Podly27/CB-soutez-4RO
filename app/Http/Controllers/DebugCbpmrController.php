@@ -187,32 +187,28 @@ class DebugCbpmrController extends Controller
         }
 
         $stage = 'start';
-        $serverToken = env('DIAG_TOKEN');
-        $reqToken = (string) ($_GET['token'] ?? '');
-        $url = $_GET['url'] ?? '';
-        $rawQs = $_SERVER['QUERY_STRING'] ?? null;
-        $getKeys = array_keys($_GET);
-
-        if (! $serverToken || $reqToken === '' || ! hash_equals($serverToken, $reqToken)) {
-            return response()->json([
-                'ok' => false,
-                'error' => 'forbidden',
-                'stage' => 'validate',
-                'server_set' => (bool) $serverToken,
-                'server_len' => strlen((string) $serverToken),
-                'req_len' => strlen($reqToken),
-                'raw_qs' => $rawQs,
-                'get_keys' => $getKeys,
-            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-        }
-
         try {
             header('Content-Type: application/json; charset=utf-8');
             ini_set('display_errors', '0');
             error_reporting(E_ALL & ~E_DEPRECATED);
 
-            $stage = 'validate_url';
-            if (! is_string($url) || trim($url) === '') {
+            $stage = 'validate';
+            $reqToken = (string) ($_GET['token'] ?? '');
+            $url = (string) ($_GET['url'] ?? '');
+            $rawQs = $_SERVER['QUERY_STRING'] ?? null;
+            $getKeys = array_keys($_GET);
+
+            if ($reqToken === '') {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'missing_token',
+                    'stage' => $stage,
+                    'raw_qs' => $rawQs,
+                    'get_keys' => $getKeys,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            if ($url === '') {
                 return response()->json([
                     'ok' => false,
                     'error' => 'missing_url',
@@ -222,8 +218,28 @@ class DebugCbpmrController extends Controller
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
-            $parsed = parse_url($url);
-            $hostSeen = is_array($parsed) ? ($parsed['host'] ?? null) : null;
+            $serverToken = (string) env('DIAG_TOKEN');
+            if (! hash_equals($serverToken, $reqToken)) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'forbidden',
+                    'stage' => $stage,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'validate_url';
+            $parts = parse_url($url);
+            if ($parts === false) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'invalid_url',
+                    'stage' => $stage,
+                    'url_seen' => $url,
+                ], 200)->header('Content-Type', 'application/json; charset=utf-8');
+            }
+
+            $stage = 'validate_host';
+            $hostSeen = is_array($parts) ? ($parts['host'] ?? null) : null;
             $host = is_string($hostSeen) ? strtolower($hostSeen) : '';
             if ($host !== '' && Str::startsWith($host, 'www.')) {
                 $host = substr($host, 4);
@@ -231,12 +247,13 @@ class DebugCbpmrController extends Controller
             if ($host === '') {
                 return response()->json([
                     'ok' => false,
-                    'error' => 'invalid_url',
+                    'error' => 'invalid_host',
                     'stage' => $stage,
+                    'host_seen' => $hostSeen,
+                    'url_seen' => $url,
                 ], 200)->header('Content-Type', 'application/json; charset=utf-8');
             }
 
-            $stage = 'validate_host';
             $allowedHosts = ['cbpmr.info'];
             if (! in_array($host, $allowedHosts, true)) {
                 return response()->json([
@@ -320,6 +337,7 @@ class DebugCbpmrController extends Controller
             $logMessage = implode("\n", [
                 '[' . now()->toDateTimeString() . '] cbpmr-parse exception',
                 'stage: ' . $stage,
+                'class: ' . get_class($e),
                 'url: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
                 'host_seen: ' . (is_string($hostSeen) ? $hostSeen : json_encode($hostSeen)),
                 'message: ' . $e->getMessage(),
