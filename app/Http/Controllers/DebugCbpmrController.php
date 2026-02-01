@@ -210,8 +210,12 @@ class DebugCbpmrController extends Controller
         }
 
         $parsed = parse_url($url);
-        $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
-        if (! $host) {
+        $hostSeen = is_array($parsed) ? ($parsed['host'] ?? null) : null;
+        $host = is_string($hostSeen) ? strtolower($hostSeen) : '';
+        if ($host !== '' && Str::startsWith($host, 'www.')) {
+            $host = substr($host, 4);
+        }
+        if ($host === '') {
             return response()->json([
                 'ok' => false,
                 'error' => 'invalid_url',
@@ -219,11 +223,14 @@ class DebugCbpmrController extends Controller
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
 
-        if ($host !== 'cbpmr.info') {
+        $allowedHosts = ['cbpmr.info'];
+        if (! in_array($host, $allowedHosts, true)) {
             return response()->json([
                 'ok' => false,
                 'error' => 'invalid_host',
                 'stage' => 'validate',
+                'host_seen' => $hostSeen,
+                'url_seen' => $url,
             ], 200)->header('Content-Type', 'application/json; charset=utf-8');
         }
 
