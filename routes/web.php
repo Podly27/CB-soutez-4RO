@@ -159,11 +159,19 @@ $router->get('/_debug/cbpmr-fetch', function () {
 
     try {
         $stage = 'validate';
-        $token = env('DIAG_TOKEN');
-        $requestToken = request()->query('token');
+        $serverToken = env('DIAG_TOKEN') ?: env('DIAGTOKEN') ?: env('DIAG_SECRET') ?: env('DEBUG_TOKEN');
+        $reqToken = (string) request('token');
 
-        if (! $token || $requestToken !== $token) {
-            return $jsonResponse(['ok' => false, 'error' => 'forbidden', 'stage' => $stage], 200);
+        if (! $serverToken || ! $reqToken || ! hash_equals($serverToken, $reqToken)) {
+            return $jsonResponse([
+                'ok' => false,
+                'error' => 'forbidden',
+                'stage' => $stage,
+                'server_token_set' => (bool) $serverToken,
+                'server_token_len' => strlen((string) $serverToken),
+                'req_token_len' => strlen($reqToken),
+                'req_has_url' => (bool) request('url'),
+            ], 200);
         }
 
         $url = request()->query('url');

@@ -240,8 +240,11 @@
 
       log(`Share URL: ${shareUrl}`);
 
-      const debugUrl = `/_debug/cbpmr-fetch?token=${encodeURIComponent(token)}&url=${encodeURIComponent(shareUrl)}`;
+      const baseUrl = (window.APP_URL || window.location.origin).replace(/\/+$/, '');
+      const httpsBaseUrl = baseUrl.replace(/^http:/i, 'https:');
+      const debugUrl = `${httpsBaseUrl}/_debug/cbpmr-fetch?token=${encodeURIComponent(token)}&url=${encodeURIComponent(shareUrl)}`;
       log(`Server-side debug: ${debugUrl}`);
+      log(`Debug URL length: ${debugUrl.length}`);
 
       try {
         const response = await fetchWithTimeout(debugUrl);
