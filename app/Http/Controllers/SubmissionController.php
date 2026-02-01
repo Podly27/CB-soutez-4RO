@@ -181,7 +181,7 @@ class SubmissionController extends Controller
             'portable_id' => $portableId,
             'total_km' => $payload['total_km'] ?? null,
             'entries' => $this->mapCbpmrEntries($entries),
-            'fetched_at' => now()->toAtomString(),
+            'fetched_at' => \Carbon\Carbon::now()->toAtomString(),
         ];
     }
 
