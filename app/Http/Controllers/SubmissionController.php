@@ -9,8 +9,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
-use App\Services\Cbpmr\CbpmrShareFetcher;
-use App\Services\Cbpmr\CbpmrShareParser;
+use App\Services\Cbpmr\CbpmrShareService;
 use App\Exceptions\SubmissionException;
 use App\Http\Utilities;
 use App\Models\Category;
@@ -76,15 +75,14 @@ class SubmissionController extends Controller
     public function processCbpmrInfo()
     {
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
-        $shareFetcher = app(CbpmrShareFetcher::class);
-        $shareParser = app(CbpmrShareParser::class);
+        $shareService = app(CbpmrShareService::class);
         $originalUrl = $this->diaryUrl;
-        $shareResponse = $shareFetcher->fetch($originalUrl, ['use_cookies' => true]);
+        $shareResponse = $shareService->fetchHtml($originalUrl);
         if (! $shareResponse['ok']) {
             $this->logCbpmrShareFailure([
                 'original_url' => $originalUrl,
-                'final_url' => $shareResponse['url'] ?? null,
-                'http_code' => $shareResponse['http_status'] ?? null,
+                'final_url' => $shareResponse['final_url'] ?? null,
+                'http_code' => $shareResponse['http_code'] ?? null,
                 'title' => null,
                 'found_rows_count' => null,
                 'extracted_portable_id' => null,
@@ -97,25 +95,38 @@ class SubmissionController extends Controller
 
         $html = $shareResponse['body'] ?? '';
         $finalUrl = $shareResponse['final_url'] ?? $originalUrl;
-        $httpStatus = $shareResponse['http_status'] ?? null;
+        $httpStatus = $shareResponse['http_code'] ?? null;
         $redirectChain = $shareResponse['redirect_chain'] ?? [];
         $finalPath = parse_url($finalUrl, PHP_URL_PATH) ?? '';
         $portableId = $this->extractPortableIdFromPath($finalPath);
-        $portableParse = $shareParser->parsePortable($html);
-        $title = $portableParse['title'] ?? null;
-        $foundRowsCount = $portableParse['found_rows_count'] ?? null;
-        $hasTable = $portableParse['has_table'] ?? false;
-        $entries = $portableParse['entries'] ?? [];
-        $hasEntries = count($entries) > 0;
         $isPortable = Str::contains($finalPath, '/share/portable/');
-
-        if (! $isPortable || ! $hasTable || ! $hasEntries) {
+        if (Str::contains($finalPath, '/share/error')) {
             $this->logCbpmrShareFailure([
                 'original_url' => $originalUrl,
                 'final_url' => $finalUrl,
                 'http_code' => $httpStatus,
-                'title' => $title,
-                'found_rows_count' => $foundRowsCount,
+                'title' => null,
+                'found_rows_count' => null,
+                'extracted_portable_id' => $portableId,
+                'redirect_chain' => $redirectChain,
+                'body_snippet' => $this->snippetHtml($html),
+            ]);
+            throw new SubmissionException(422, [
+                __('Nepodařilo se načíst data deníku z CBPMR. Ověřte, že odkaz je veřejný.'),
+            ]);
+        }
+
+        $portableParse = $shareService->parsePortableHtml($html, $finalUrl);
+        $entries = $portableParse['entries'] ?? [];
+        $hasEntries = count($entries) > 0;
+
+        if (! $isPortable || ! $hasEntries) {
+            $this->logCbpmrShareFailure([
+                'original_url' => $originalUrl,
+                'final_url' => $finalUrl,
+                'http_code' => $httpStatus,
+                'title' => null,
+                'found_rows_count' => $portableParse['rows_found'] ?? null,
                 'extracted_portable_id' => $portableId,
                 'redirect_chain' => $redirectChain,
                 'body_snippet' => $this->snippetHtml($html),
@@ -132,8 +143,8 @@ class SubmissionController extends Controller
                 'original_url' => $originalUrl,
                 'final_url' => $finalUrl,
                 'http_code' => $httpStatus,
-                'title' => $title,
-                'found_rows_count' => $foundRowsCount,
+                'title' => null,
+                'found_rows_count' => $portableParse['rows_found'] ?? null,
                 'extracted_portable_id' => $portableId,
                 'redirect_chain' => $redirectChain,
             ]);
@@ -154,17 +165,22 @@ class SubmissionController extends Controller
             throw new \RuntimeException('Invalid CBPMR.info portable response.');
         }
 
+        $rowsFound = $payload['rows_found'] ?? null;
+        $qsoCountHeader = $payload['qso_count_header'] ?? null;
+        $qsoCount = $rowsFound && $rowsFound > 0 ? $rowsFound : $this->extractInt($qsoCountHeader);
+
         $this->diaryUrl = $originalUrl;
         $this->callSign = $expName ?? $place;
         $this->qthName = $place;
         $this->qthLocator = $locator;
-        $this->qsoCount = $totalCalls;
+        $this->qsoCount = $qsoCount ?? $totalCalls;
         $this->diaryOptions = [
             'source' => 'cbpmr',
             'original_url' => $originalUrl,
             'final_url' => $finalUrl,
             'portable_id' => $portableId,
             'total_km' => $payload['total_km'] ?? null,
+            'entries' => $this->mapCbpmrEntries($entries),
             'fetched_at' => now()->toAtomString(),
         ];
     }
@@ -182,6 +198,40 @@ class SubmissionController extends Controller
     {
         $snippet = trim(mb_substr($html, 0, 500, 'UTF-8'));
         return $snippet !== '' ? $snippet : null;
+    }
+
+    private function extractInt(?string $value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (preg_match('/(\d+)/', $value, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    private function mapCbpmrEntries(array $entries): array
+    {
+        $mapped = [];
+        foreach ($entries as $entry) {
+            $row = [
+                'time' => $entry['time'] ?? null,
+                'locator' => $entry['locator'] ?? null,
+                'km' => $entry['km_int'] ?? null,
+                'name' => $entry['name'] ?? null,
+            ];
+
+            if (! empty($entry['note'])) {
+                $row['note'] = $entry['note'];
+            }
+
+            $mapped[] = $row;
+        }
+
+        return $mapped;
     }
 
     private function logCbpmrShareFailure(array $context): void
