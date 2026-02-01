@@ -222,6 +222,19 @@
       return match ? match[1] : null;
     }
 
+    function logOriginWarning(label, urlValue) {
+      try {
+        const currentOrigin = window.location.origin;
+        const targetOrigin = new URL(urlValue).origin;
+        if (currentOrigin !== targetOrigin) {
+          log(`${label} míří na jinou doménu (${targetOrigin}) než stránka (${currentOrigin}).`, 'warning');
+          log('Při volání z prohlížeče může selhat CORS (NetworkError). Spusťte debug z té samé domény nebo přes serverový proxy.', 'warning');
+        }
+      } catch (error) {
+        log(`Nepodařilo se vyhodnotit origin ${label}: ${error.message}`, 'warning');
+      }
+    }
+
     async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -336,6 +349,8 @@
 
       log(`Share URL: ${shareUrl}`);
       log(`API Base URL (normalizováno): ${apiBaseUrl}`);
+      logOriginWarning('Share URL', shareUrl);
+      logOriginWarning('API Base URL', apiBaseUrl);
 
       const shareToken = extractShareToken(shareUrl);
       if (shareToken) {
