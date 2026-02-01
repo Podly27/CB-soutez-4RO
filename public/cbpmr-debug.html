@@ -247,11 +247,31 @@
         const response = await fetchWithTimeout(debugUrl);
         log(`Debug response status: ${response.status} ${response.statusText}`);
 
-        const payload = await response.json();
+        const contentType = response.headers.get('content-type') ?? '';
+        const responseText = await response.text();
+        let payload = null;
+
+        if (!contentType.includes('application/json')) {
+          log(`Unexpected content-type: ${contentType || 'unknown'}`, 'warning');
+        }
+
+        try {
+          payload = JSON.parse(responseText);
+        } catch (parseError) {
+          log(`JSON parse error: ${parseError.message}`, 'error');
+          log(`Raw response: ${responseText.slice(0, 500)}`, 'warning');
+          return;
+        }
+
         if (!payload.ok) {
           log(`Debug error: ${payload.error ?? 'unknown error'}`, 'error');
+          log(`class: ${payload.class ?? 'n/a'}`);
+          log(`message: ${payload.message ?? 'n/a'}`);
+          log(`location: ${payload.location ?? 'n/a'}`);
           log(`code: ${payload.code ?? 'n/a'}`);
           log(`url: ${payload.url ?? 'n/a'}`);
+          log(`http_status: ${payload.http_status ?? 'n/a'}`);
+          log(`response_snippet: ${payload.response_snippet ?? 'n/a'}`);
           return;
         }
 

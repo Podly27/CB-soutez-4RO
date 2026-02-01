@@ -149,60 +149,102 @@ $router->get('/_debug/response', function () {
 });
 
 $router->get('/_debug/cbpmr-fetch', function () {
-    $token = env('DIAG_TOKEN');
-    $requestToken = request()->query('token');
+    $jsonResponse = static function (array $payload, int $status = 200) {
+        return response()
+            ->json($payload, $status)
+            ->header('Content-Type', 'application/json; charset=utf-8');
+    };
 
-    if (! $token || $requestToken !== $token) {
-        return response()->json(['ok' => false, 'error' => 'Forbidden.'], 403);
-    }
+    try {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
 
-    $url = request()->query('url');
-    if (! is_string($url) || trim($url) === '') {
-        return response()->json(['ok' => false, 'error' => 'Missing url.'], 400);
-    }
+        if (! $token || $requestToken !== $token) {
+            return $jsonResponse(['ok' => false, 'error' => 'forbidden'], 200);
+        }
 
-    $parsed = parse_url($url);
-    $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
-    $path = is_array($parsed) ? ($parsed['path'] ?? '') : '';
+        $url = request()->query('url');
+        if (! is_string($url) || trim($url) === '') {
+            return $jsonResponse(['ok' => false, 'error' => 'missing_url'], 200);
+        }
 
-    $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
-    if (! in_array($host, $allowedHosts, true) || ! Str::startsWith($path, '/share/')) {
-        return response()->json(['ok' => false, 'error' => 'Invalid URL.'], 400);
-    }
+        $parsed = parse_url($url);
+        $host = is_array($parsed) ? strtolower($parsed['host'] ?? '') : '';
+        $path = is_array($parsed) ? ($parsed['path'] ?? '') : '';
 
-    /** @var CbpmrShareFetcher $fetcher */
-    $fetcher = app(CbpmrShareFetcher::class);
-    $fetchResult = $fetcher->fetch($url);
+        $allowedHosts = ['cbpmr.info', 'www.cbpmr.info'];
+        if (! in_array($host, $allowedHosts, true) || ! Str::startsWith($path, '/share/')) {
+            return $jsonResponse(['ok' => false, 'error' => 'invalid_host'], 200);
+        }
 
-    if (! $fetchResult['ok']) {
-        return response()->json([
+        /** @var CbpmrShareFetcher $fetcher */
+        $fetcher = app(CbpmrShareFetcher::class);
+        $fetchResult = $fetcher->fetch($url);
+
+        if (! $fetchResult['ok']) {
+            return $jsonResponse([
+                'ok' => false,
+                'error' => 'fetch_failed',
+                'message' => $fetchResult['error'] ?? 'Fetch failed.',
+                'code' => $fetchResult['code'] ?? null,
+                'url' => $fetchResult['url'] ?? $url,
+            ], 200);
+        }
+
+        $body = $fetchResult['body'] ?? '';
+        $bodyLength = strlen($body);
+        $snippet = mb_substr($body, 0, 1000, 'UTF-8');
+        $snippet = trim($snippet);
+        $httpStatus = $fetchResult['http_status'] ?? null;
+
+        if (is_numeric($httpStatus) && (int) $httpStatus >= 400) {
+            $errorSnippet = mb_substr($body, 0, 500, 'UTF-8');
+            return $jsonResponse([
+                'ok' => false,
+                'error' => 'http_error',
+                'http_status' => (int) $httpStatus,
+                'response_snippet' => trim($errorSnippet),
+            ], 200);
+        }
+
+        /** @var CbpmrShareParser $parser */
+        $parser = app(CbpmrShareParser::class);
+        $parsedResult = $parser->parse($body);
+
+        return $jsonResponse([
+            'ok' => true,
+            'final_url' => $fetchResult['final_url'] ?? $url,
+            'http_status' => $httpStatus,
+            'content_type' => $fetchResult['content_type'] ?? null,
+            'body_length' => $bodyLength,
+            'title' => $parsedResult['title'] ?? null,
+            'body_snippet' => $snippet,
+            'detected_format' => $parsedResult['detected_format'] ?? null,
+            'parsed_preview' => $parsedResult['parsed_preview'] ?? null,
+        ], 200);
+    } catch (\Throwable $e) {
+        $urlParam = request()->query('url');
+        $logPath = storage_path('logs/last_exception.txt');
+        $trace = Str::limit($e->getTraceAsString(), 2000, "\n...truncated...");
+        $logMessage = implode("\n", [
+            '[' . now()->toDateTimeString() . '] cbpmr-fetch exception',
+            'message: ' . $e->getMessage(),
+            'location: ' . $e->getFile() . ':' . $e->getLine(),
+            'url_param: ' . (is_string($urlParam) ? $urlParam : json_encode($urlParam)),
+            'trace:',
+            $trace,
+            '',
+        ]);
+        @file_put_contents($logPath, $logMessage);
+
+        return $jsonResponse([
             'ok' => false,
-            'error' => $fetchResult['error'] ?? 'Fetch failed.',
-            'code' => $fetchResult['code'] ?? null,
-            'url' => $fetchResult['url'] ?? $url,
-        ], 502);
+            'error' => 'cbpmr_fetch_failed',
+            'class' => get_class($e),
+            'message' => $e->getMessage(),
+            'location' => $e->getFile() . ':' . $e->getLine(),
+        ], 200);
     }
-
-    $body = $fetchResult['body'] ?? '';
-    $bodyLength = strlen($body);
-    $snippet = mb_substr($body, 0, 1000, 'UTF-8');
-    $snippet = trim($snippet);
-
-    /** @var CbpmrShareParser $parser */
-    $parser = app(CbpmrShareParser::class);
-    $parsedResult = $parser->parse($body);
-
-    return response()->json([
-        'ok' => true,
-        'final_url' => $fetchResult['final_url'] ?? $url,
-        'http_status' => $fetchResult['http_status'] ?? null,
-        'content_type' => $fetchResult['content_type'] ?? null,
-        'body_length' => $bodyLength,
-        'title' => $parsedResult['title'] ?? null,
-        'body_snippet' => $snippet,
-        'detected_format' => $parsedResult['detected_format'] ?? null,
-        'parsed_preview' => $parsedResult['parsed_preview'] ?? null,
-    ], 200);
 });
 
 $router->get('/_debug/routes-auth', function () {
