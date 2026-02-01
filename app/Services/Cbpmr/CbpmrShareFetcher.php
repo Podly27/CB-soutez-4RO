@@ -6,13 +6,20 @@ namespace App\Services\Cbpmr;
 
 class CbpmrShareFetcher
 {
-    public const DEFAULT_TIMEOUT_SECONDS = 18;
+    public const DEFAULT_TIMEOUT_SECONDS = 20;
 
     public function fetch(string $url, array $options = []): array
     {
         $useCookies = $options['use_cookies'] ?? true;
+        $originalUrl = $url;
         $ch = curl_init($url);
         if (! $ch) {
+            logger()->warning('cbpmr.share_fetch_failed', [
+                'original_url' => $originalUrl,
+                'final_url' => null,
+                'http_code' => null,
+                'redirect_chain' => [],
+            ]);
             return [
                 'ok' => false,
                 'error' => 'Failed to initialize cURL.',
@@ -76,7 +83,7 @@ class CbpmrShareFetcher
         $contentType = $info['content_type'] ?? null;
 
         if ($body === false) {
-            return [
+            $payload = [
                 'ok' => false,
                 'error' => $curlError ?: 'Failed to fetch remote content.',
                 'code' => $curlCode,
@@ -86,9 +93,16 @@ class CbpmrShareFetcher
                 'final_url' => $finalUrl,
                 'redirect_chain' => $redirectChain,
             ];
+            logger()->warning('cbpmr.share_fetch_failed', [
+                'original_url' => $originalUrl,
+                'final_url' => $finalUrl,
+                'http_code' => $httpStatus,
+                'redirect_chain' => $redirectChain,
+            ]);
+            return $payload;
         }
 
-        return [
+        $payload = [
             'ok' => true,
             'body' => $body,
             'final_url' => $finalUrl,
@@ -96,5 +110,12 @@ class CbpmrShareFetcher
             'content_type' => $contentType,
             'redirect_chain' => $redirectChain,
         ];
+        logger()->info('cbpmr.share_fetch', [
+            'original_url' => $originalUrl,
+            'final_url' => $finalUrl,
+            'http_code' => $httpStatus,
+            'redirect_chain' => $redirectChain,
+        ]);
+        return $payload;
     }
 }
