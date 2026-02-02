@@ -459,6 +459,7 @@ class SubmissionController extends Controller
                 if (is_array($decodedOptions)) {
                     $diary->options = $decodedOptions;
                 }
+                $diary->offsetUnset('options');
                 $diary->save();
 
                 $contestLink = route('contest', [ 'name' => Str::replace(' ', '-', $request->input('contest')) ]) . '#scroll';
