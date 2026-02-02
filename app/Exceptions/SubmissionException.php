@@ -22,6 +22,9 @@ class SubmissionException extends Exception
         } elseif ($messages === null) {
             $messages = [];
         }
+        if ($messages === [] || count($messages) === 0) {
+            $messages = [ __('Došlo k chybě při odesílání hlášení. Zkuste to prosím znovu.') ];
+        }
         $request->session()->flash('submissionErrors', $messages);
         return response((new SubmissionController)->show($request, $this->resetStep))
                                                   ->setStatusCode($this->statusCode);

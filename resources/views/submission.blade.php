@@ -18,6 +18,9 @@
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 return $decoded;
             }
+            if (trim($v) !== '') {
+                return [$v];
+            }
         }
 
         return [];
@@ -43,12 +46,15 @@
                     </div>
                     <script>location.hash = '#scroll'</script>
                 @elseif ($submissionErrors = Session::pull('submissionErrors'))
+                    @php
+                        $submissionErrorsList = $asArray($submissionErrors);
+                    @endphp
                     <div class="alert alert-danger">
-                        @if ($safeCount($submissionErrors) == 1)
-                            {{ $submissionErrors[0] }}
+                        @if ($safeCount($submissionErrorsList) == 1)
+                            {{ $submissionErrorsList[0] }}
                         @else
                             <ul>
-                            @foreach ($asArray($submissionErrors) as $error)
+                            @foreach ($submissionErrorsList as $error)
                                 <li>{{ $error }}</li>
                             @endforeach
                             </ul>
@@ -88,10 +94,13 @@
                         <div class="col-12 col-md-6 form-group required">
                             <label for="contest">{{ __('Soutěž') }}</label>
                             <select name="contest" class="form-control form-control-lg p-0 px-3" id="contest">
-                                @if ($safeCount($data->contests) > 1)
+                                @php
+                                    $contestList = $asArray($data->contests);
+                                @endphp
+                                @if ($safeCount($contestList) > 1)
                                 <option disabled selected value>{{ __('Vyber možnost...') }}</option>
                                 @endif
-                                @foreach ($asArray($data->contests) as $contest)
+                                @foreach ($contestList as $contest)
                                     <option value="{{ $contest->name }}" {{ Session::get('diary.contest') == $contest->name ? ' selected' : '' }}>{{ Utilities::contestL10n($contest->name) }}</option>
                                 @endforeach
                             </select>
@@ -99,10 +108,13 @@
                         <div class="col-12 col-md-6 form-group required">
                             <label for="category">{{ trans_choice('Kategorie', 1) }}</label>
                             <select name="category" class="form-control form-control-lg p-0 px-3" id="category">
-                                @if ($safeCount($data->categories) > 1)
+                                @php
+                                    $categoryList = $asArray($data->categories);
+                                @endphp
+                                @if ($safeCount($categoryList) > 1)
                                 <option disabled selected value>{{ __('Vyber možnost...') }}</option>
                                 @endif
-                                @foreach ($asArray($data->categories) as $category)
+                                @foreach ($categoryList as $category)
                                     <option value="{{ $category->name }}" {{ Session::get('diary.category') == $category->name ? ' selected' : '' }}>{{ __($category->name) }}</option>
                                 @endforeach
                             </select>

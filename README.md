@@ -79,48 +79,72 @@ CbpmrShareService::parsePortable()
 SubmissionController (validate + map + store)
 ```
 
-## Debug nástroje
+## Debug & Diagnostics
+
+Podrobnosti viz [docs/debug.md](docs/debug.md).
+
+### DIAG_TOKEN (povinný pro debug)
+- Debug endpointy **vždy vyžadují token** v query parametru (`DIAG_TOKEN` v `.env`).  
+- Příklady:
+  - `/diag?token=<DIAG_TOKEN>`
+  - `/_debug/cbpmr-parse?token=<DIAG_TOKEN>&url=<encoded>`
 
 ### Debug endpointy
-
-⚠️ Debug endpointy **nejsou určeny pro běžné uživatele** a v produkci **vyžadují DIAG token**.
-
-- `/_debug/ping-json`  
+- `/_debug/ping-json?token=...`  
   → ověření, že routing + JSON odpověď fungují  
-  - Parametry: žádné  
   - Úspěch: `{"ok": true, "ts": "...ISO8601..."}`  
-  - Typická chyba: N/A (endpoint neověřuje token, problém bude spíš 404/500 z routingu)  
-
-- `/_debug/trace`  
+- `/_debug/trace?token=...`  
   → ověření, že controller + middleware jsou funkční  
-  - Parametry: žádné  
   - Úspěch: `{"ok": true, "hit": "DebugCbpmrController@trace", "app_env": "...", "php": "...", "has_diag_token": true}`  
-  - Typická chyba: 500 (např. při fatální chybě v middleware), případně 404 při špatném routingu  
-
-- `/_debug/cbpmr-parse`  
+- `/_debug/cbpmr-parse?token=...&url=...`  
   → kompletní fetch + parse CBPMR  
-  - Parametry:  
-    - `token`: DIAG token  
-    - `url`: CBPMR share URL (musí být `https://cbpmr.info/share/...`)  
   - Úspěch: `{"ok": true, "stage": "return_ok", "final_url": "...", "portable_id": "...", "rows_found": 123, "first_rows": [...]}`  
   - Typická chyba: `{"ok": false, "error": "missing_token|missing_url|invalid_host|http_error|no_rows_found|exception", "stage": "..."}`  
+- `/_debug/cbpmr-fetch?token=...&url=...`  
+  → raw fetch + preview HTML  
 
-## Jak postupovat, když něco přestane fungovat
+### last_exception.txt
+- Root výjimky se zapisují do `storage/logs/last_exception.txt` (jen přes `/diag`).  
+- **Nikdy** nesmí být veřejně dostupný přes webserver.  
+- Pro `QueryException` hledej `sql` + `bindings` pro diagnostiku schema/encoding problémů.  
 
-1. **Nejde login?**  
-   - zkontroluj `.env` (OAuth keys)  
-   - zkontroluj redirect URI  
-   - zkontroluj logy OAuth chyb  
+## Import providers
 
-2. **Nejde odeslat formulář / 500 error?**  
-   - zkontroluj `storage/` a `bootstrap/cache`  
-   - zkontroluj povinné ENV proměnné (MAIL, OWNER_MAIL)  
+Detailní popis viz [docs/providers.md](docs/providers.md).
 
-3. **Nefunguje CBPMR import?**  
-   - otevři share URL ručně v prohlížeči  
-   - zkus debug endpoint  
-   - ověř, že stránka je veřejná  
-   - zkontroluj, zda CBPMR nezměnil HTML strukturu  
+Podporované zdroje deníků:
+- `cbdx.cz` (OK)
+- `cbpmr.cz` (OK)
+- `cbpmr.info` (OK)
+
+Poznámky pro `cbpmr.info`:
+- Redirect `/share/{id}` → `/share/portable/{id}`.  
+- Parsuje se: `title`, `place`, `my_locator`, `qso_count_header`, `rows`.  
+- Importní payload se **neukládá** do tabulky `diary` jako JSON (schema nemá `meta/options`).  
+
+## DB Schema constraints
+
+- Tabulka `diary` **nemá** sloupce `options`/`meta`.  
+  - Importní payload patří do session nebo do samostatné tabulky (pokud bude potřeba).  
+- `score_points` existuje a používá se při soutěžích, které mají criterion `score_points`.  
+
+## Runbook: když něco nejde uložit
+
+1. Zreprodukuj problém na `/submission` (step=2).  
+2. Otevři `/diag?token=...`.  
+3. Zkontroluj `last_exception.txt`:  
+   - `QueryException` → schema/constraint/encoding  
+   - `ViewException` → typy ve view (`count/foreach`) → použij `$safeCount/$asArray`  
+   - `Missing column` → DB schema mismatch  
+4. Fix **minimálně** v `SubmissionController::submit()` (step=2) – zásada: nehrabat do middleware.  
+5. Po změně Blade šablon smaž `storage/framework/views/*.php`.  
+
+## Deployment notes (InfinityFree)
+
+- PHP 8.3, deploy přes GitHub Actions.  
+- Writable adresáře: `storage/`, `storage/logs/`, `bootstrap/cache/`.  
+- Po změnách view mazat `storage/framework/views/*.php` (na InfinityFree bez artisan).  
+- Logy ze `storage/logs` nikdy nevystavovat veřejně.  
 
 ## Dokumentace prostředí (ENV)
 
