@@ -75,6 +75,10 @@ class Handler extends ExceptionHandler
             return $this->errorJsonOrErrorPageResponse(__('Došlo k chybě!'), 500);
         }
 
+        if ($exception instanceof SubmissionException) {
+            return $exception->render($request);
+        }
+
         return parent::render($request, $exception);
     }
 
