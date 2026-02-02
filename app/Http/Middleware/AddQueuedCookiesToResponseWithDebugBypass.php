@@ -9,7 +9,12 @@ class AddQueuedCookiesToResponseWithDebugBypass extends AddQueuedCookiesToRespon
     public function handle($request, \Closure $next)
     {
         if ($this->shouldBypass($request)) {
-            return $next($request);
+            $response = $next($request);
+            if ($response === null) {
+                return response('Middleware returned null', 500);
+            }
+
+            return $response;
         }
 
         return parent::handle($request, $next);
@@ -17,9 +22,6 @@ class AddQueuedCookiesToResponseWithDebugBypass extends AddQueuedCookiesToRespon
 
     private function shouldBypass($request): bool
     {
-        return $request->is('_debug/ping-json')
-            || $request->is('_debug/trace')
-            || $request->is('public/_debug/ping-json')
-            || $request->is('public/_debug/trace');
+        return $request->is('_debug/*');
     }
 }
