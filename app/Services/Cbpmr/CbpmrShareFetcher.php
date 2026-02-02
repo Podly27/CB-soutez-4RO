@@ -14,12 +14,15 @@ class CbpmrShareFetcher
         $originalUrl = $url;
         $ch = curl_init($url);
         if (! $ch) {
-            logger()->warning('cbpmr.share_fetch_failed', [
-                'original_url' => $originalUrl,
-                'final_url' => null,
-                'http_code' => null,
-                'redirect_chain' => [],
-            ]);
+            try {
+                app('log')->warning('cbpmr.share_fetch_failed', [
+                    'original_url' => $originalUrl,
+                    'final_url' => null,
+                    'http_code' => null,
+                    'redirect_chain' => [],
+                ]);
+            } catch (\Throwable $e) {
+            }
             return [
                 'ok' => false,
                 'error' => 'Failed to initialize cURL.',
@@ -93,12 +96,15 @@ class CbpmrShareFetcher
                 'final_url' => $finalUrl,
                 'redirect_chain' => $redirectChain,
             ];
-            logger()->warning('cbpmr.share_fetch_failed', [
-                'original_url' => $originalUrl,
-                'final_url' => $finalUrl,
-                'http_code' => $httpStatus,
-                'redirect_chain' => $redirectChain,
-            ]);
+            try {
+                app('log')->warning('cbpmr.share_fetch_failed', [
+                    'original_url' => $originalUrl,
+                    'final_url' => $finalUrl,
+                    'http_code' => $httpStatus,
+                    'redirect_chain' => $redirectChain,
+                ]);
+            } catch (\Throwable $e) {
+            }
             return $payload;
         }
 
@@ -110,12 +116,15 @@ class CbpmrShareFetcher
             'content_type' => $contentType,
             'redirect_chain' => $redirectChain,
         ];
-        logger()->info('cbpmr.share_fetch', [
-            'original_url' => $originalUrl,
-            'final_url' => $finalUrl,
-            'http_code' => $httpStatus,
-            'redirect_chain' => $redirectChain,
-        ]);
+        try {
+            app('log')->info('cbpmr.share_fetch', [
+                'original_url' => $originalUrl,
+                'final_url' => $finalUrl,
+                'http_code' => $httpStatus,
+                'redirect_chain' => $redirectChain,
+            ]);
+        } catch (\Throwable $e) {
+        }
         return $payload;
     }
 }
