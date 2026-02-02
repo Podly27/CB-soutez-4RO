@@ -424,9 +424,22 @@ class SubmissionController extends Controller
                 return redirect(route('submissionForm', [ 'step' => 2 ]));
             }
 
+            $decodedOptions = null;
+            $optionsJson = $request->input('diaryOptions');
+            if (is_string($optionsJson) && trim($optionsJson) !== '') {
+                $decodedOptions = json_decode($optionsJson, true);
+            }
+            $contestRecord = null;
+            $categoryRecord = null;
+            $contestId = null;
+            $categoryId = null;
+            $diary = null;
+
             try {
-                $contestId = $this->contests->where('name', $request->input('contest'))->first()->id;
-                $categoryId = $this->categories->where('name', $request->input('category'))->first()->id;
+                $contestRecord = $this->contests->where('name', $request->input('contest'))->first();
+                $contestId = $contestRecord->id;
+                $categoryRecord = $this->categories->where('name', $request->input('category'))->first();
+                $categoryId = $categoryRecord->id;
 
                 $diary = new Diary;
                 $diary->contest_id = $contestId;
@@ -443,12 +456,8 @@ class SubmissionController extends Controller
                 $diary->qth_locator_lat = $lat;
                 $diary->qso_count = $request->input('qsoCount');
                 $diary->email = $request->input('email');
-                $optionsJson = $request->input('diaryOptions');
-                if (is_string($optionsJson) && trim($optionsJson) !== '') {
-                    $decodedOptions = json_decode($optionsJson, true);
-                    if (is_array($decodedOptions)) {
-                        $diary->options = $decodedOptions;
-                    }
+                if (is_array($decodedOptions)) {
+                    $diary->options = $decodedOptions;
                 }
                 $diary->save();
 
@@ -458,6 +467,38 @@ class SubmissionController extends Controller
                                                                                                                                                 'contestName' => $contestName ]));
                 return redirect(route('submissionForm'));
             } catch (\Exception $e) {
+                $logLines = [
+                    'CBPMR SUBMIT FAIL @461',
+                    sprintf(
+                        'request: contest=%s, category=%s, diaryUrl=%s, callSign=%s, qthName=%s, qthLocator=%s, qsoCount=%s, email=%s',
+                        $request->input('contest'),
+                        $request->input('category'),
+                        $request->input('diaryUrl'),
+                        $request->input('callSign'),
+                        $request->input('qthName'),
+                        $request->input('qthLocator'),
+                        $request->input('qsoCount'),
+                        $request->input('email')
+                    ),
+                    'decoded diaryOptions: ' . var_export($decodedOptions, true),
+                    'diaryOptions json_last_error_msg: ' . json_last_error_msg(),
+                    'diary_url: ' . ($diary ? var_export($diary->diary_url, true) : 'diary not set'),
+                    'contest lookup: ' . ($contestRecord ? ('found id=' . $contestRecord->id) : 'not found'),
+                    'category lookup: ' . ($categoryRecord ? ('found id=' . $categoryRecord->id) : 'not found'),
+                    sprintf(
+                        'exception: %s %s %s:%s',
+                        get_class($e),
+                        $e->getMessage(),
+                        $e->getFile(),
+                        $e->getLine()
+                    ),
+                    '---',
+                ];
+                file_put_contents(
+                    storage_path('logs/last_exception.txt'),
+                    implode(PHP_EOL, $logLines) . PHP_EOL,
+                    FILE_APPEND
+                );
                 throw new SubmissionException(500, array(__('Hlášení do soutěže se nepodařilo uložit.')));
             }
         } else {
