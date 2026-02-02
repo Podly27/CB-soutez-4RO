@@ -19,7 +19,9 @@ class EncryptCookiesWithDebugBypass extends EncryptCookies
     {
         return $request->is('_debug/ping-json')
             || $request->is('_debug/trace')
+            || $request->is('_debug/route-trace')
             || $request->is('public/_debug/ping-json')
-            || $request->is('public/_debug/trace');
+            || $request->is('public/_debug/trace')
+            || $request->is('public/_debug/route-trace');
     }
 }

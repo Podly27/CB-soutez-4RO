@@ -173,6 +173,34 @@ $registerDebugRoutes = function (string $prefix) use ($router) {
     $router->get("{$prefix}/cbpmr-fetch", 'DebugCbpmrController@fetch');
     $router->get("{$prefix}/cbpmr-parse", 'DebugCbpmrController@parse');
     $router->get("{$prefix}/submission-dry-run", 'SubmissionController@dryRun');
+    $router->get("{$prefix}/route-trace", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
+
+        if (! $token || $requestToken !== $token) {
+            abort(404);
+        }
+
+        $tracePath = storage_path('logs/route_trace.txt');
+        $relativePath = 'storage/logs/route_trace.txt';
+        $exists = file_exists($tracePath);
+        $tail = '';
+
+        if ($exists && is_readable($tracePath)) {
+            $lines = @file($tracePath, FILE_IGNORE_NEW_LINES);
+            if ($lines !== false) {
+                $tailLines = array_slice($lines, -50);
+                $tail = implode("\n", $tailLines);
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'file' => $relativePath,
+            'exists' => $exists,
+            'tail' => $tail,
+        ], 200);
+    });
 
     $router->get("{$prefix}/routes", function () {
         $token = env('DIAG_TOKEN');
