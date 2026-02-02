@@ -84,6 +84,10 @@ class Handler extends ExceptionHandler
 
     public static function storeLastException(Throwable $exception, $errorId = null)
     {
+        if ($exception instanceof SubmissionException) {
+            return $errorId;
+        }
+
         $logPath = storage_path('logs/last_exception.txt');
         try {
             if (! $errorId) {
