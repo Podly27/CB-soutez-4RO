@@ -62,6 +62,8 @@ class CbpmrShareService
         return [
             'portable_id' => $payload['portable_id'],
             'title' => $payload['title'],
+            'exp_name' => $payload['exp_name'],
+            'date' => $payload['date'],
             'my_locator' => $payload['my_locator'],
             'place' => $payload['place'],
             'qso_count_header' => $payload['qso_count_header'],
@@ -162,6 +164,9 @@ class CbpmrShareService
         $place = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="place"]'));
         $qsoCountHeader = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="distance"]'));
         $totalKm = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="km"]'));
+        $headerText = $this->normalizeText($this->textFromXPath($xpath, '//header'));
+        $date = $this->extractDate($headerText ?: $title);
+        $expName = $title ?: ($headerText !== '' ? $headerText : null);
 
         $rows = $xpath->query('//table[@id="myTable"]//tbody//tr');
         $entries = [];
@@ -204,6 +209,8 @@ class CbpmrShareService
         return [
             'portable_id' => $portableId,
             'title' => $title,
+            'exp_name' => $expName,
+            'date' => $date,
             'my_locator' => $myLocator !== '' ? $myLocator : null,
             'place' => $place !== '' ? $place : null,
             'qso_count_header' => $qsoCountHeader !== '' ? $qsoCountHeader : null,
@@ -211,6 +218,19 @@ class CbpmrShareService
             'rows_found' => $rowsFound,
             'entries' => $entries,
         ];
+    }
+
+    private function extractDate(?string $text): ?string
+    {
+        if (! $text) {
+            return null;
+        }
+
+        if (preg_match('/\b\d{1,2}\.\d{1,2}\.\d{4}\b/u', $text, $matches)) {
+            return $matches[0];
+        }
+
+        return null;
     }
 
     private function extractTitleSnippet(string $html): ?string

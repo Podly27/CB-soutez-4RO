@@ -172,6 +172,7 @@ $registerDebugRoutes = function (string $prefix) use ($router) {
     $router->get("{$prefix}/trace", 'DebugCbpmrController@trace');
     $router->get("{$prefix}/cbpmr-fetch", 'DebugCbpmrController@fetch');
     $router->get("{$prefix}/cbpmr-parse", 'DebugCbpmrController@parse');
+    $router->get("{$prefix}/submission-dry-run", 'SubmissionController@dryRun');
 
     $router->get("{$prefix}/routes", function () {
         $token = env('DIAG_TOKEN');

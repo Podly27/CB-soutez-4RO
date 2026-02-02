@@ -168,6 +168,7 @@ class SubmissionController extends Controller
         $expName = $payload['exp_name'] ?? $payload['title'] ?? null;
         $place = $payload['place'] ?? $expName;
         $locator = $payload['my_locator'] ?? null;
+        $date = $payload['date'] ?? null;
         $entries = $payload['entries'] ?? [];
         $totalCalls = count($entries);
         if (! $place || ! $locator || $totalCalls === 0) {
@@ -181,15 +182,18 @@ class SubmissionController extends Controller
         $this->diaryUrl = $originalUrl;
         $this->callSign = $expName ?? $place;
         $this->qthName = $place;
-        $this->qthLocator = $locator;
+        $this->qthLocator = strtoupper($locator);
         $this->qsoCount = $qsoCount ?? $totalCalls;
         $this->diaryOptions = [
-            'source' => 'cbpmr',
+            'source' => 'cbpmr_info',
             'original_url' => $originalUrl,
             'final_url' => $finalUrl,
             'portable_id' => $portableId,
+            'exp_name' => $expName,
+            'date' => $date,
             'total_km' => $payload['total_km'] ?? null,
-            'entries' => $this->mapCbpmrEntries($entries),
+            'entries' => $this->mapCbpmrEntries($entries, $date, $expName),
+            'entries_count' => $totalCalls,
             'fetched_at' => \Carbon\Carbon::now()->toAtomString(),
         ];
     }
@@ -222,15 +226,19 @@ class SubmissionController extends Controller
         return null;
     }
 
-    private function mapCbpmrEntries(array $entries): array
+    private function mapCbpmrEntries(array $entries, ?string $date = null, ?string $fallbackName = null): array
     {
         $mapped = [];
         foreach ($entries as $entry) {
+            $kmInt = $entry['km_int'] ?? $entry['km'] ?? null;
+            $locator = $entry['locator'] ?? $entry['remote_locator'] ?? null;
             $row = [
+                'date' => $date,
                 'time' => $entry['time'] ?? null,
-                'locator' => $entry['locator'] ?? null,
-                'km' => $entry['km_int'] ?? null,
-                'name' => $entry['name'] ?? null,
+                'locator' => $locator ? strtoupper($locator) : null,
+                'km' => $kmInt !== null ? sprintf('%d km', $kmInt) : null,
+                'km_int' => $kmInt,
+                'name' => $entry['name'] ?? $fallbackName,
             ];
 
             if (! empty($entry['note'])) {
@@ -351,6 +359,17 @@ class SubmissionController extends Controller
 
             return redirect(route('submissionForm', [ 'step' => 2 ]) . '#scroll');
         } elseif ($request->input('step') == 2) {
+            $optionsJson = $request->input('diaryOptions');
+            $decodedOptions = $this->decodeDiaryOptions($optionsJson);
+            $source = $this->detectDiarySource($request->input('diaryUrl'), $decodedOptions);
+
+            if ($source === 'cbpmr_info') {
+                $fallbackContest = $this->resolveContestNameFromOptions($decodedOptions);
+                if (! $request->filled('contest') && $fallbackContest) {
+                    $request->merge(['contest' => $fallbackContest]);
+                }
+            }
+
             $validator = Validator::make($request->all(), [
                 'contest' => 'required|max:255',
                 'category' => 'required|max:255',
@@ -379,10 +398,26 @@ class SubmissionController extends Controller
             }
 
             try {
-                $contestId = $this->contests->where('name', $request->input('contest'))->first()->id;
-                $categoryId = $this->categories->where('name', $request->input('category'))->first()->id;
+                $stage = 'map_import';
+                $failReason = null;
+
+                $contest = $this->contests->where('name', $request->input('contest'))->first();
+                if (! $contest) {
+                    $failReason = 'contest_not_found';
+                    throw new \RuntimeException('Contest not found.');
+                }
+
+                $category = $this->categories->where('name', $request->input('category'))->first();
+                if (! $category) {
+                    $failReason = 'category_not_found';
+                    throw new \RuntimeException('Category not found.');
+                }
+
+                $contestId = $contest->id;
+                $categoryId = $category->id;
 
                 $diary = new Diary;
+                $stage = 'db_save';
                 $diary->contest_id = $contestId;
                 $diary->category_id = $categoryId;
                 if (Auth::check()) {
@@ -397,12 +432,18 @@ class SubmissionController extends Controller
                 $diary->qth_locator_lat = $lat;
                 $diary->qso_count = $request->input('qsoCount');
                 $diary->email = $request->input('email');
-                $optionsJson = $request->input('diaryOptions');
-                if (is_string($optionsJson) && trim($optionsJson) !== '') {
-                    $decodedOptions = json_decode($optionsJson, true);
-                    if (is_array($decodedOptions)) {
-                        $diary->options = $decodedOptions;
-                    }
+                $decodedOptions = $this->normalizeDiaryOptions(
+                    $decodedOptions,
+                    [
+                        'contest_id' => $contestId,
+                        'category_id' => $categoryId,
+                        'call_sign' => $request->input('callSign'),
+                        'qth_name' => $request->input('qthName'),
+                        'qth_locator' => $request->input('qthLocator'),
+                    ]
+                );
+                if (is_array($decodedOptions)) {
+                    $diary->options = $decodedOptions;
                 }
                 $diary->save();
 
@@ -412,6 +453,14 @@ class SubmissionController extends Controller
                                                                                                                                                 'contestName' => $contestName ]));
                 return redirect(route('submissionForm'));
             } catch (\Exception $e) {
+                $this->logSubmissionException(
+                    $stage ?? 'db_save',
+                    $request,
+                    $decodedOptions ?? null,
+                    $source ?? $this->detectDiarySource($request->input('diaryUrl'), $decodedOptions ?? null),
+                    $failReason ?? null,
+                    $e
+                );
                 throw new SubmissionException(500, array(__('Hlášení do soutěže se nepodařilo uložit.')));
             }
         } else {
@@ -431,5 +480,256 @@ class SubmissionController extends Controller
 
         return in_array($host, ['cbpmr.info', 'www.cbpmr.info'], true)
             && Str::startsWith($path, '/share/');
+    }
+
+    public function dryRun(Request $request)
+    {
+        $token = env('DIAG_TOKEN');
+        $requestToken = $request->query('token');
+        if (! $token || ! hash_equals((string) $token, (string) $requestToken)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'forbidden',
+            ], 200);
+        }
+
+        $url = $request->query('url');
+        if (! is_string($url) || trim($url) === '') {
+            return response()->json([
+                'ok' => false,
+                'error' => 'missing_url',
+            ], 200);
+        }
+
+        if (! $this->isCbpmrShareUrl($url)) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'invalid_url',
+            ], 200);
+        }
+
+        $this->diaryUrl = $url;
+
+        try {
+            $this->processCbpmrInfo();
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'import_failed',
+                'message' => $e->getMessage(),
+            ], 200);
+        }
+
+        $options = $this->diaryOptions;
+        $source = $this->detectDiarySource($this->diaryUrl, $options);
+        $contestName = $this->resolveContestNameFromOptions($options);
+        $categoryName = $this->categories->first()->name ?? null;
+
+        $payload = [
+            'contest' => $contestName,
+            'category' => $categoryName,
+            'diaryUrl' => $this->diaryUrl,
+            'callSign' => $this->callSign,
+            'qthName' => $this->qthName,
+            'qthLocator' => $this->qthLocator,
+            'qsoCount' => $this->qsoCount,
+            'email' => 'dry-run@example.com',
+        ];
+
+        $validator = Validator::make($payload, [
+            'contest' => 'required|max:255',
+            'category' => 'required|max:255',
+            'diaryUrl' => 'max:255|unique:\App\Models\Diary,diary_url',
+            'callSign' => 'required|max:255',
+            'qthName' => 'required|max:255',
+            'qthLocator' => [ 'required', 'size:6', new Locator ],
+            'qsoCount' => 'required|integer|gt:0',
+            'email' => 'required|email',
+        ], $this->messages);
+
+        $contest = $contestName ? $this->contests->where('name', $contestName)->first() : null;
+        $category = $categoryName ? $this->categories->where('name', $categoryName)->first() : null;
+
+        $options = $this->normalizeDiaryOptions($options, [
+            'contest_id' => $contest ? $contest->id : null,
+            'category_id' => $category ? $category->id : null,
+            'call_sign' => $this->callSign,
+            'qth_name' => $this->qthName,
+            'qth_locator' => $this->qthLocator,
+        ]);
+
+        if ($validator->fails()) {
+            $errors = $validator->errors()->keys();
+            $failReason = $errors[0] ?? 'validation_failed';
+            return response()->json([
+                'ok' => false,
+                'fail_reason' => $failReason,
+                'computed_fields' => [
+                    'contest_id' => $options['contest_id'] ?? null,
+                    'diary_type' => $options['diary_type'] ?? null,
+                    'qth' => $this->qthLocator,
+                    'entries_count' => $options['entries_count'] ?? null,
+                    'source' => $source,
+                ],
+            ], 200);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'computed_fields' => [
+                'contest_id' => $options['contest_id'] ?? null,
+                'diary_type' => $options['diary_type'] ?? null,
+                'qth' => $this->qthLocator,
+                'entries_count' => $options['entries_count'] ?? null,
+                'source' => $source,
+            ],
+        ], 200);
+    }
+
+    private function decodeDiaryOptions(?string $optionsJson): ?array
+    {
+        if (! is_string($optionsJson) || trim($optionsJson) === '') {
+            return null;
+        }
+
+        $decoded = json_decode($optionsJson, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function normalizeDiaryOptions(?array $options, array $context): ?array
+    {
+        if (! is_array($options)) {
+            return null;
+        }
+
+        if (($options['source'] ?? null) !== 'cbpmr_info') {
+            return $options;
+        }
+
+        $options['contest_id'] = $options['contest_id'] ?? $context['contest_id'] ?? null;
+        $options['category_id'] = $options['category_id'] ?? $context['category_id'] ?? null;
+        $options['diary_type'] = $options['diary_type'] ?? 'other';
+        $options['call_sign'] = $options['call_sign'] ?? $context['call_sign'] ?? null;
+        $options['qth_name'] = $options['qth_name'] ?? $context['qth_name'] ?? null;
+        $qthLocator = $context['qth_locator'] ?? null;
+        if (is_string($qthLocator)) {
+            $qthLocator = strtoupper($qthLocator);
+        }
+        $options['qth_locator'] = $options['qth_locator'] ?? $qthLocator;
+        $options['date'] = $options['date'] ?? $this->defaultCbpmrDate();
+
+        if (! isset($options['entries_count']) && isset($options['entries']) && is_array($options['entries'])) {
+            $options['entries_count'] = count($options['entries']);
+        }
+
+        return $options;
+    }
+
+    private function defaultCbpmrDate(): string
+    {
+        return \Carbon\Carbon::now()->format('d.m.Y');
+    }
+
+    private function detectDiarySource(?string $diaryUrl, ?array $options): string
+    {
+        if (is_array($options) && isset($options['source'])) {
+            return $options['source'];
+        }
+
+        if (! is_string($diaryUrl) || $diaryUrl === '') {
+            return 'manual';
+        }
+
+        if ($this->isCbpmrShareUrl($diaryUrl)) {
+            return 'cbpmr_info';
+        }
+
+        if (Str::startsWith($diaryUrl, ['http://www.cbpmr.cz/deniky/', 'https://www.cbpmr.cz/deniky/'])) {
+            return 'cbpmr_cz';
+        }
+
+        if (Str::startsWith($diaryUrl, ['http://drive.cbdx.cz/xdenik', 'https://drive.cbdx.cz/xdenik'])) {
+            return 'cbdx';
+        }
+
+        return 'manual';
+    }
+
+    private function resolveContestNameFromOptions(?array $options): ?string
+    {
+        if (isset($options['contest_id'])) {
+            $contest = $this->contests->firstWhere('id', $options['contest_id']);
+            if ($contest) {
+                return $contest->name;
+            }
+        }
+
+        $date = is_array($options) ? ($options['date'] ?? null) : null;
+        $parsedDate = $this->parseCbpmrDate($date);
+        if ($parsedDate) {
+            $contest = $this->contests->first(function ($contest) use ($parsedDate) {
+                return $parsedDate->between($contest->contest_start, $contest->contest_end);
+            });
+            if ($contest) {
+                return $contest->name;
+            }
+        }
+
+        return $this->contests->first()->name ?? null;
+    }
+
+    private function parseCbpmrDate(?string $date): ?\Carbon\Carbon
+    {
+        if (! $date) {
+            return null;
+        }
+
+        try {
+            return \Carbon\Carbon::createFromFormat('d.m.Y', $date);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function logSubmissionException(
+        string $stage,
+        Request $request,
+        ?array $options,
+        string $source,
+        ?string $failReason,
+        \Throwable $exception
+    ): void {
+        $requiredFields = [
+            'contest' => $request->input('contest'),
+            'category' => $request->input('category'),
+            'diaryUrl' => $request->input('diaryUrl'),
+            'callSign' => $request->input('callSign'),
+            'qthName' => $request->input('qthName'),
+            'qthLocator' => $request->input('qthLocator'),
+            'qsoCount' => $request->input('qsoCount'),
+            'email' => $request->input('email'),
+        ];
+
+        $entries = is_array($options) ? ($options['entries'] ?? []) : [];
+        $entriesPreview = [];
+        if (is_array($entries)) {
+            foreach (array_slice($entries, 0, 2) as $entry) {
+                $entriesPreview[] = $entry;
+            }
+        }
+
+        $payload = [
+            'timestamp: ' . date(DATE_ATOM),
+            'stage: ' . $stage,
+            'source: ' . $source,
+            'fail_reason: ' . ($failReason ?? ''),
+            'exception: ' . get_class($exception) . ' ' . $exception->getMessage(),
+            'required_fields: ' . json_encode($requiredFields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'entries_count: ' . (is_array($entries) ? count($entries) : 0),
+            'entries_preview: ' . json_encode($entriesPreview, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ];
+
+        @file_put_contents(storage_path('logs/last_exception.txt'), implode("\n", $payload));
     }
 }
