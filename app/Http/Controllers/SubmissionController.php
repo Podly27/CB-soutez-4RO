@@ -469,33 +469,30 @@ class SubmissionController extends Controller
             } catch (\App\Exceptions\SubmissionException $e) {
                 throw $e;
             } catch (\Throwable $e) {
+                $id = bin2hex(random_bytes(4));
+
                 $payload = [
-                    'id' => bin2hex(random_bytes(4)),
+                    'id' => $id,
                     'class' => get_class($e),
                     'message' => $e->getMessage(),
                     'file' => $e->getFile(),
                     'line' => $e->getLine(),
                     'code' => $e->getCode(),
                     'time' => date('c'),
+                    'context' => [
+                        'contestId' => $contestId ?? null,
+                        'categoryId' => $categoryId ?? null,
+                        'diaryUrl' => $diary->diary_url ?? null,
+                        'locator' => $diary->qth_locator ?? null,
+                        'qsoCount' => $diary->qso_count ?? null,
+                        'source' => $diary->source ?? null,
+                    ],
                 ];
 
                 if ($e instanceof \Illuminate\Database\QueryException) {
                     $payload['sql'] = $e->getSql();
                     $payload['bindings'] = $e->getBindings();
                 }
-
-                $payload['context'] = [
-                    'contestId' => $contestId ?? null,
-                    'categoryId' => $categoryId ?? null,
-                    'diaryUrl' => $diary->diaryUrl ?? null,
-                    'locator' => $diary->locator ?? null,
-                    'qsoCount' => $diary->qsoCount ?? null,
-                    'source' => $diary->source ?? null,
-                    'diaryOptions_type' => isset($diary->diaryOptions) ? gettype($diary->diaryOptions) : null,
-                    'diaryOptions_sample' => isset($diary->diaryOptions)
-                        ? (is_string($diary->diaryOptions) ? mb_substr($diary->diaryOptions, 0, 500) : '[not-string]')
-                        : null,
-                ];
 
                 $txt = '';
                 foreach ($payload as $k => $v) {
@@ -507,7 +504,7 @@ class SubmissionController extends Controller
 
                 throw new \App\Exceptions\SubmissionException(
                     500,
-                    'Hlášení do soutěže se nepodařilo uložit.'
+                    'Hlášení do soutěže se nepodařilo uložit. ID: ' . $id
                 );
             }
         } else {

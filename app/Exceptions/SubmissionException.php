@@ -16,7 +16,13 @@ class SubmissionException extends Exception
 
     public function render($request)
     {
-        $request->session()->flash('submissionErrors', $this->messages);
+        $messages = $this->messages;
+        if (is_string($messages)) {
+            $messages = trim($messages) === '' ? [] : [ $messages ];
+        } elseif ($messages === null) {
+            $messages = [];
+        }
+        $request->session()->flash('submissionErrors', $messages);
         return response((new SubmissionController)->show($request, $this->resetStep))
                                                   ->setStatusCode($this->statusCode);
     }
