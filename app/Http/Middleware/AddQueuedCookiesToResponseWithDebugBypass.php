@@ -8,11 +8,29 @@ class AddQueuedCookiesToResponseWithDebugBypass extends AddQueuedCookiesToRespon
 {
     public function handle($request, \Closure $next)
     {
-        if ($this->shouldBypass($request)) {
-            return $next($request);
+        if (method_exists($this, 'shouldBypass') && $this->shouldBypass($request)) {
+            $resp = $next($request);
+
+            if ($resp === null) {
+                $resp = response(
+                    'Downstream handler returned null (cookie bypass).',
+                    500
+                );
+            }
+
+            return $resp;
         }
 
-        return parent::handle($request, $next);
+        $resp = parent::handle($request, $next);
+
+        if ($resp === null) {
+            $resp = response(
+                'Parent cookie middleware returned null.',
+                500
+            );
+        }
+
+        return $resp;
     }
 
     private function shouldBypass($request): bool
