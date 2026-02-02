@@ -38,7 +38,7 @@
 
                 @elseif ($step == 1)
                 <h3>{{ __('Krok 1: Výběr deníku') }}</h3>
-                <form action="submission" method="post" class="submission-form" id="submission-form">
+                <form action="{{ route('submissionSubmit') }}" method="post" class="submission-form" id="submission-form">
                     <input type="hidden" name="_csrf" value="{{ Utilities::getCsrfToken() }}">
                     <input type="hidden" name="step" value="1">
                     <div class="form-group">
@@ -54,7 +54,7 @@
 
                 @elseif ($step == 2)
                 <h3>{{ __('Krok 2') }}: {{ Session::get('diary') ? __('Kontrola a doplnění hlášení') : __('Vyplnění hlášení') }}</h3>
-                <form action="submission" method="post" class="submission-form" id="submission-form">
+                <form action="{{ route('submissionSubmit') }}" method="post" class="submission-form" id="submission-form">
                     <input type="hidden" name="_csrf" value="{{ Utilities::getCsrfToken() }}">
                     <input type="hidden" name="step" value="2">
                     <input type="hidden" name="diaryUrl" value="{{ old('diaryUrl', session('diary.url')) }}">

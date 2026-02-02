@@ -613,8 +613,11 @@ $router->get('/submission', [
     'as' => 'submissionForm',
     'uses' => 'SubmissionController@show'
 ]);
+$router->get('/submission/{resetStep}', [
+    'uses' => 'SubmissionController@show'
+]);
 $router->post('/submission', [
-    'as' => 'submission',
+    'as' => 'submissionSubmit',
     'uses' => 'SubmissionController@submit'
 ]);
 $router->get('/hlaseni', function () {
