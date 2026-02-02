@@ -284,10 +284,10 @@ class SubmissionController extends Controller
         }
         $diarySources = implode(', ', $this->diarySources);
 
-        return view('submission', [ 'title' => __('Odeslat hlášení'),
-                                    'data' => $this,
-                                    'step' => $step,
-                                    'diarySources' => $diarySources ]);
+        return response()->view('submission', [ 'title' => __('Odeslat hlášení'),
+                                                'data' => $this,
+                                                'step' => $step,
+                                                'diarySources' => $diarySources ]);
     }
 
     public function submit(Request $request)

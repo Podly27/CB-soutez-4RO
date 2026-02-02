@@ -33,14 +33,14 @@ class ContestController extends Controller
                 ];
             }
         }
-        return view('contest', [ 'title' => __('Soutěžní kolo') . ' ' . Utilities::contestL10n($contest->name),
-                                 'contest' => $contest,
-                                 'diaries' => $diaries ?? [] ]);
+        return response()->view('contest', [ 'title' => __('Soutěžní kolo') . ' ' . Utilities::contestL10n($contest->name),
+                                             'contest' => $contest,
+                                             'diaries' => $diaries ?? [] ]);
     }
 
     public function showAll(Request $request)
     {
-        return view('contests', [ 'title' => __('Soutěžní kola'),
-                                  'contests' => Contest::allOrdered() ]);
+        return response()->view('contests', [ 'title' => __('Soutěžní kola'),
+                                              'contests' => Contest::allOrdered() ]);
     }
 }

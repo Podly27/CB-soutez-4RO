@@ -19,10 +19,10 @@ class ResultsController extends Controller
             }
         }
 
-        return view('results', [ 'title' => __('Výsledkové listiny'),
-                                 'allContests' => $allContests,
-                                 'allContestsDiaries' => $allContestsDiaries,
-                                 'categories' => $categories,
-                                 'contestsInProgress' => $contestsInProgress ]);
+        return response()->view('results', [ 'title' => __('Výsledkové listiny'),
+                                             'allContests' => $allContests,
+                                             'allContestsDiaries' => $allContestsDiaries,
+                                             'categories' => $categories,
+                                             'contestsInProgress' => $contestsInProgress ]);
     }
 }
