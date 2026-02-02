@@ -80,8 +80,8 @@ $app->configure('view');
 
 $app->middleware([
     App\Http\Middleware\EncryptCookiesWithDebugBypass::class,
-    App\Http\Middleware\AddQueuedCookiesToResponseWithDebugBypass::class,
-    App\Http\Middleware\StartSessionWithDebugBypass::class,
+    Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+    Illuminate\Session\Middleware\StartSession::class,
     App\Http\Middleware\ShareErrorsFromSessionWithDebugBypass::class,
     App\Http\Middleware\ClientLocale::class,
 ]);
