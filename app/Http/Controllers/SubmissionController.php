@@ -466,40 +466,49 @@ class SubmissionController extends Controller
                 Session::flash('submissionSuccess', __('Hlášení do soutěže <a href=":contestLink">:contestName</a> bylo úspěšně zpracováno.', [ 'contestLink' => $contestLink,
                                                                                                                                                 'contestName' => $contestName ]));
                 return redirect(route('submissionForm'));
-            } catch (\Exception $e) {
-                $logLines = [
-                    'CBPMR SUBMIT FAIL @461',
-                    sprintf(
-                        'request: contest=%s, category=%s, diaryUrl=%s, callSign=%s, qthName=%s, qthLocator=%s, qsoCount=%s, email=%s',
-                        $request->input('contest'),
-                        $request->input('category'),
-                        $request->input('diaryUrl'),
-                        $request->input('callSign'),
-                        $request->input('qthName'),
-                        $request->input('qthLocator'),
-                        $request->input('qsoCount'),
-                        $request->input('email')
-                    ),
-                    'decoded diaryOptions: ' . var_export($decodedOptions, true),
-                    'diaryOptions json_last_error_msg: ' . json_last_error_msg(),
-                    'diary_url: ' . ($diary ? var_export($diary->diary_url, true) : 'diary not set'),
-                    'contest lookup: ' . ($contestRecord ? ('found id=' . $contestRecord->id) : 'not found'),
-                    'category lookup: ' . ($categoryRecord ? ('found id=' . $categoryRecord->id) : 'not found'),
-                    sprintf(
-                        'exception: %s %s %s:%s',
-                        get_class($e),
-                        $e->getMessage(),
-                        $e->getFile(),
-                        $e->getLine()
-                    ),
-                    '---',
+            } catch (\App\Exceptions\SubmissionException $e) {
+                throw $e;
+            } catch (\Throwable $e) {
+                $payload = [
+                    'id' => bin2hex(random_bytes(4)),
+                    'class' => get_class($e),
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'code' => $e->getCode(),
+                    'time' => date('c'),
                 ];
-                file_put_contents(
-                    storage_path('logs/last_exception.txt'),
-                    implode(PHP_EOL, $logLines) . PHP_EOL,
-                    FILE_APPEND
+
+                if ($e instanceof \Illuminate\Database\QueryException) {
+                    $payload['sql'] = $e->getSql();
+                    $payload['bindings'] = $e->getBindings();
+                }
+
+                $payload['context'] = [
+                    'contestId' => $contestId ?? null,
+                    'categoryId' => $categoryId ?? null,
+                    'diaryUrl' => $diary->diaryUrl ?? null,
+                    'locator' => $diary->locator ?? null,
+                    'qsoCount' => $diary->qsoCount ?? null,
+                    'source' => $diary->source ?? null,
+                    'diaryOptions_type' => isset($diary->diaryOptions) ? gettype($diary->diaryOptions) : null,
+                    'diaryOptions_sample' => isset($diary->diaryOptions)
+                        ? (is_string($diary->diaryOptions) ? mb_substr($diary->diaryOptions, 0, 500) : '[not-string]')
+                        : null,
+                ];
+
+                $txt = '';
+                foreach ($payload as $k => $v) {
+                    $txt .= $k . ': ' . (is_scalar($v) ? $v : json_encode($v, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) . PHP_EOL;
+                }
+                $txt .= 'Stack trace:' . PHP_EOL . $e->getTraceAsString() . PHP_EOL;
+
+                @file_put_contents(storage_path('logs/last_exception.txt'), $txt);
+
+                throw new \App\Exceptions\SubmissionException(
+                    500,
+                    'Hlášení do soutěže se nepodařilo uložit.'
                 );
-                throw new SubmissionException(500, array(__('Hlášení do soutěže se nepodařilo uložit.')));
             }
         } else {
             throw new SubmissionException(400, array(__('Neplatný formulářový krok nebo neúplný požadavek')));
