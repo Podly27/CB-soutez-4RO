@@ -79,6 +79,7 @@ $app->configure('view');
 */
 
 $app->middleware([
+    App\Http\Middleware\NullResponseGuard::class,
     App\Http\Middleware\EncryptCookiesWithDebugBypass::class,
     Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
     Illuminate\Session\Middleware\StartSession::class,
