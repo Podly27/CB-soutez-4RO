@@ -163,30 +163,6 @@ class DebugCbpmrController extends Controller
 
     public function parse(\Laravel\Lumen\Http\Request $request)
     {
-        if (($_GET['debug'] ?? null) === '1') {
-            return response()->json([
-                'ok' => true,
-                'stage' => 'entered',
-            ], 200)->header('Content-Type', 'application/json; charset=utf-8');
-        }
-
-        if (($_GET['_enter'] ?? null) === '1') {
-            $serverToken = env('DIAG_TOKEN');
-            $reqToken = (string) ($_GET['token'] ?? '');
-            $rawQs = $_SERVER['QUERY_STRING'] ?? null;
-            $getKeys = array_keys($_GET);
-
-            return response()->json([
-                'ok' => true,
-                'stage' => 'entered2',
-                'qs' => $_GET,
-                'req_len' => strlen($reqToken),
-                'server_len' => strlen((string) $serverToken),
-                'raw_qs' => $rawQs,
-                'get_keys' => $getKeys,
-            ], 200);
-        }
-
         $stage = 'start';
         try {
             header('Content-Type: application/json; charset=utf-8');

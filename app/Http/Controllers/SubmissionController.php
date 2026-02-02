@@ -77,7 +77,7 @@ class SubmissionController extends Controller
         $this->diaryUrl = preg_replace('|^http:|', 'https:', $this->diaryUrl);
         $shareService = app(CbpmrShareService::class);
         $originalUrl = $this->diaryUrl;
-        $shareResponse = $shareService->fetchHtml($originalUrl);
+        $shareResponse = $shareService->fetch($originalUrl);
         if (! $shareResponse['ok']) {
             $this->logCbpmrShareFailure([
                 'original_url' => $originalUrl,
@@ -86,10 +86,11 @@ class SubmissionController extends Controller
                 'title' => null,
                 'found_rows_count' => null,
                 'extracted_portable_id' => null,
+                'error' => $shareResponse['error'] ?? null,
                 'redirect_chain' => $shareResponse['redirect_chain'] ?? null,
             ]);
             throw new SubmissionException(422, [
-                __('Nepodařilo se načíst data deníku z CBPMR. Ověřte, že odkaz je veřejný.'),
+                __('Nepodařilo se načíst deník z CBPMR. Zkontrolujte, že odkaz je veřejný.'),
             ]);
         }
 
@@ -99,7 +100,7 @@ class SubmissionController extends Controller
         $redirectChain = $shareResponse['redirect_chain'] ?? [];
         $finalPath = parse_url($finalUrl, PHP_URL_PATH) ?? '';
         $portableId = $this->extractPortableIdFromPath($finalPath);
-        $isPortable = Str::contains($finalPath, '/share/portable/');
+        $isShare = Str::startsWith($finalPath, '/share/');
         if (Str::contains($finalPath, '/share/error')) {
             $this->logCbpmrShareFailure([
                 'original_url' => $originalUrl,
@@ -112,15 +113,21 @@ class SubmissionController extends Controller
                 'body_snippet' => $this->snippetHtml($html),
             ]);
             throw new SubmissionException(422, [
-                __('Nepodařilo se načíst data deníku z CBPMR. Ověřte, že odkaz je veřejný.'),
+                __('Nepodařilo se načíst deník z CBPMR. Zkontrolujte, že odkaz je veřejný.'),
             ]);
         }
 
-        $portableParse = $shareService->parsePortableHtml($html, $finalUrl);
+        $portableParse = $shareService->parsePortable((string) $html, $finalUrl);
+        if (! isset($portableParse['title']) || $portableParse['title'] === null) {
+            $portableParse['title'] = $shareResponse['title_snippet'] ?? null;
+        }
+        if (! isset($portableParse['exp_name']) || $portableParse['exp_name'] === null) {
+            $portableParse['exp_name'] = $portableParse['title'] ?? null;
+        }
         $entries = $portableParse['entries'] ?? [];
         $hasEntries = count($entries) > 0;
 
-        if (! $isPortable || ! $hasEntries) {
+        if (! $isShare || ! $hasEntries) {
             $this->logCbpmrShareFailure([
                 'original_url' => $originalUrl,
                 'final_url' => $finalUrl,
@@ -128,11 +135,12 @@ class SubmissionController extends Controller
                 'title' => null,
                 'found_rows_count' => $portableParse['rows_found'] ?? null,
                 'extracted_portable_id' => $portableId,
+                'error' => $shareResponse['error'] ?? null,
                 'redirect_chain' => $redirectChain,
                 'body_snippet' => $this->snippetHtml($html),
             ]);
             throw new SubmissionException(422, [
-                __('Nepodařilo se načíst data deníku z CBPMR. Ověřte, že odkaz je veřejný.'),
+                __('Nepodařilo se načíst deník z CBPMR. Zkontrolujte, že odkaz je veřejný.'),
             ]);
         }
 
@@ -146,10 +154,11 @@ class SubmissionController extends Controller
                 'title' => null,
                 'found_rows_count' => $portableParse['rows_found'] ?? null,
                 'extracted_portable_id' => $portableId,
+                'error' => $e->getMessage(),
                 'redirect_chain' => $redirectChain,
             ]);
             throw new SubmissionException(422, [
-                __('Nepodařilo se načíst data deníku z CBPMR. Ověřte, že odkaz je veřejný.'),
+                __('Nepodařilo se načíst deník z CBPMR. Zkontrolujte, že odkaz je veřejný.'),
             ]);
         }
     }
@@ -241,6 +250,7 @@ class SubmissionController extends Controller
             'original_url: ' . ($context['original_url'] ?? ''),
             'final_url: ' . ($context['final_url'] ?? ''),
             'http_code: ' . ($context['http_code'] ?? ''),
+            'error: ' . ($context['error'] ?? ''),
             'title: ' . ($context['title'] ?? ''),
             'found_rows_count: ' . ($context['found_rows_count'] ?? ''),
             'extracted_portable_id: ' . ($context['extracted_portable_id'] ?? ''),
@@ -284,6 +294,17 @@ class SubmissionController extends Controller
 
             $diaryUrl = trim($request->input('diaryUrl'));
             $diarySourceFound = false;
+            if ($this->isCbpmrShareUrl($diaryUrl)) {
+                $this->diaryUrl = $diaryUrl;
+                try {
+                    $this->processCbpmrInfo();
+                } catch (SubmissionException $e) {
+                    throw $e;
+                } catch (\Exception $e) {
+                    throw new SubmissionException(500, array(__('Deník se nepodařilo načíst.')));
+                }
+                $diarySourceFound = true;
+            } else {
             foreach (config('ctvero.diaryUrlToProcessor') as $diaryUrlTemplate => $processor) {
                 if (preg_match('|^' . preg_quote($diaryUrlTemplate) . '|', $diaryUrl)) {
                     $processor = 'process' . $processor;
@@ -299,6 +320,7 @@ class SubmissionController extends Controller
                     $diarySourceFound = true;
                     break;
                 }
+            }
             }
 
             if (! $diarySourceFound) {
@@ -395,5 +417,19 @@ class SubmissionController extends Controller
         } else {
             throw new SubmissionException(400, array(__('Neplatný formulářový krok nebo neúplný požadavek')));
         }
+    }
+
+    private function isCbpmrShareUrl(string $url): bool
+    {
+        $parsed = parse_url($url);
+        if (! is_array($parsed)) {
+            return false;
+        }
+
+        $host = strtolower($parsed['host'] ?? '');
+        $path = $parsed['path'] ?? '';
+
+        return in_array($host, ['cbpmr.info', 'www.cbpmr.info'], true)
+            && Str::startsWith($path, '/share/');
     }
 }
