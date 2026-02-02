@@ -12,9 +12,9 @@ class NullResponseGuard
         $response = $next($request);
 
         if ($response === null) {
+            $uriWithQuery = $request->getRequestUri();
             $msg = "NULL RESPONSE\n"
-                ."uri: ".($_SERVER['REQUEST_URI'] ?? '')."\n"
-                ."route: ".($request->path() ?? '')."\n"
+                ."uri: ".($uriWithQuery ?? '')."\n"
                 ."method: ".$request->method()."\n";
             @file_put_contents(storage_path('logs/last_exception.txt'), $msg);
 
