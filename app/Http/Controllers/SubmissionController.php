@@ -359,9 +359,17 @@ class SubmissionController extends Controller
 
             return redirect(route('submissionForm', [ 'step' => 2 ]) . '#scroll');
         } elseif ($request->input('step') == 2) {
-            $optionsJson = $request->input('diaryOptions');
+            $sessionDiary = Session::get('diary', []);
+            $diaryUrl = trim((string) $request->input('diaryUrl', $sessionDiary['url'] ?? ''));
+            $diaryOptions = (string) $request->input('diaryOptions', $sessionDiary['options'] ?? '');
+            $request->merge([
+                'diaryUrl' => $diaryUrl,
+                'diaryOptions' => $diaryOptions,
+            ]);
+
+            $optionsJson = $diaryOptions;
             $decodedOptions = $this->decodeDiaryOptions($optionsJson);
-            $source = $this->detectDiarySource($request->input('diaryUrl'), $decodedOptions);
+            $source = $this->detectDiarySource($diaryUrl, $decodedOptions);
 
             if ($source === 'cbpmr_info') {
                 $fallbackContest = $this->resolveContestNameFromOptions($decodedOptions);
@@ -385,13 +393,13 @@ class SubmissionController extends Controller
                 Session::flash('diary', [
                     'contest' => $request->input('contest'),
                     'category' => $request->input('category'),
-                    'url' => $request->input('diaryUrl'),
+                    'url' => $diaryUrl,
                     'callSign' => $request->input('callSign'),
                     'qthName' => $request->input('qthName'),
                     'qthLocator' => $request->input('qthLocator'),
                     'qsoCount' => $request->input('qsoCount'),
                     'email' => $request->input('email'),
-                    'options' => $request->input('diaryOptions'),
+                    'options' => $diaryOptions,
                 ]);
                 Session::flash('submissionErrors', $validator->errors()->all());
                 return redirect(route('submissionForm', [ 'step' => 2 ]));
@@ -423,7 +431,7 @@ class SubmissionController extends Controller
                 if (Auth::check()) {
                     $diary->user_id = Auth::user()->id;
                 }
-                $diary->diary_url = $request->input('diaryUrl') !== '' ? $request->input('diaryUrl') : NULL;
+                $diary->diary_url = $diaryUrl !== '' ? $diaryUrl : NULL;
                 $diary->call_sign = $request->input('callSign');
                 $diary->qth_name = $request->input('qthName');
                 $diary->qth_locator = strtoupper($request->input('qthLocator'));
@@ -457,7 +465,7 @@ class SubmissionController extends Controller
                     $stage ?? 'db_save',
                     $request,
                     $decodedOptions ?? null,
-                    $source ?? $this->detectDiarySource($request->input('diaryUrl'), $decodedOptions ?? null),
+                    $source ?? $this->detectDiarySource($diaryUrl, $decodedOptions ?? null),
                     $failReason ?? null,
                     $e
                 );
@@ -725,7 +733,10 @@ class SubmissionController extends Controller
             'source: ' . $source,
             'fail_reason: ' . ($failReason ?? ''),
             'exception: ' . get_class($exception) . ' ' . $exception->getMessage(),
+            'exception_file: ' . $exception->getFile() . ':' . $exception->getLine(),
             'required_fields: ' . json_encode($requiredFields, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'session_diary_url: ' . Session::get('diary.url'),
+            'session_diary_options: ' . Session::get('diary.options'),
             'entries_count: ' . (is_array($entries) ? count($entries) : 0),
             'entries_preview: ' . json_encode($entriesPreview, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ];
