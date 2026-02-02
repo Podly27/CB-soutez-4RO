@@ -16,14 +16,14 @@ class AdminController extends Controller
 {
     public function dashboard()
     {
-        return view('admin.dashboard', [
+        return response()->view('admin.dashboard', [
             'title' => __('Admin'),
         ]);
     }
 
     public function contestsIndex()
     {
-        return view('admin.contests.index', [
+        return response()->view('admin.contests.index', [
             'title' => __('Soutěže'),
             'contests' => Contest::orderBy('contest_start', 'desc')->get(),
         ]);
@@ -31,7 +31,7 @@ class AdminController extends Controller
 
     public function contestsCreate()
     {
-        return view('admin.contests.create', [
+        return response()->view('admin.contests.create', [
             'title' => __('Nové kolo'),
             'defaults' => $this->defaultContestDates(),
         ]);
@@ -44,7 +44,7 @@ class AdminController extends Controller
             abort(404);
         }
 
-        return view('admin.contests.edit', [
+        return response()->view('admin.contests.edit', [
             'title' => __('Upravit soutěž'),
             'contest' => $contest,
         ]);
@@ -211,7 +211,7 @@ class AdminController extends Controller
 
         $diaries = $query->forPage($page, $perPage)->get();
 
-        return view('admin.diaries.index', [
+        return response()->view('admin.diaries.index', [
             'title' => __('Deníky'),
             'diaries' => $diaries,
             'contests' => Contest::orderBy('contest_start', 'desc')->get(),
@@ -237,7 +237,7 @@ class AdminController extends Controller
             abort(404);
         }
 
-        return view('admin.diaries.edit', [
+        return response()->view('admin.diaries.edit', [
             'title' => __('Upravit deník'),
             'diary' => $diary,
             'contests' => Contest::orderBy('contest_start', 'desc')->get(),

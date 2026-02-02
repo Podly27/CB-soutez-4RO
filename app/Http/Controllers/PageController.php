@@ -59,12 +59,12 @@ class PageController extends Controller
             throw new UnauthorizedHttpException('');
         }
 
-        return view('profile')->with(['title' => __('Můj profil')]);
+        return response()->view('profile')->with(['title' => __('Můj profil')]);
     }
 
     public function termsAndPrivacy()
     {
-        return view('terms-and-privacy')->with([
+        return response()->view('terms-and-privacy')->with([
             'title' => __('Podmínky použití a Zásady ochrany osobních údajů'),
         ]);
     }

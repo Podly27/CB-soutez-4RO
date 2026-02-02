@@ -20,12 +20,12 @@ class IndexController extends Controller
         $lastContestDiaries = DiaryController::getContestDiaries($lastContest);
         $categories = Category::allOrdered();
 
-        return view('index', [ 'title' => 'Home',
-                               'recentAndFutureContests' => $recentAndFutureContests,
-                               'highlightContestId' => $highlightContestId,
-                               'useScorePoints' => $useScorePoints,
-                               'lastContestDiaries' => $lastContestDiaries,
-                               'categories' => $categories,
-                               'lastContest' => $lastContest ]);
+        return response()->view('index', [ 'title' => 'Home',
+                                           'recentAndFutureContests' => $recentAndFutureContests,
+                                           'highlightContestId' => $highlightContestId,
+                                           'useScorePoints' => $useScorePoints,
+                                           'lastContestDiaries' => $lastContestDiaries,
+                                           'categories' => $categories,
+                                           'lastContest' => $lastContest ]);
     }
 }
