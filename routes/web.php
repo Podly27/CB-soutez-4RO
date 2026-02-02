@@ -150,6 +150,13 @@ $registerDebugRoutes = function (string $prefix) use ($router) {
     });
 
     $router->get("{$prefix}/ping-json", function () {
+        $token = env('DIAG_TOKEN');
+        $requestToken = request()->query('token');
+
+        if (! $token || $requestToken !== $token) {
+            abort(404);
+        }
+
         return response()->json([
             'ok' => true,
             'ts' => date('c'),

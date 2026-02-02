@@ -14,6 +14,7 @@ Tento dokument shrnuje minimální kroky pro nasazení na InfinityFree tak, aby 
 - **`vendor/` musí být nasazený** (InfinityFree nemá Composer/SSH).
 - **`.env` se nedeployuje** – zůstává pouze na serveru.
 - `bootstrap/cache` musí existovat (hlídá se přes `bootstrap/cache/.gitignore`).
+- Po změnách Blade šablon smaž `storage/framework/views/*.php` (InfinityFree bez artisan).
 
 ## C) DB setup
 ### 1) Vytvoření DB v InfinityFree
@@ -56,6 +57,7 @@ DB_PASSWORD=YOUR_PASSWORD
   - Jen pro admina (DIAG_TOKEN z `.env`).
   - Obsahuje detailnější diagnostiku posledních chyb.
   - Doporučení: **DIAG_TOKEN držet mimo git**.
+  - Logy ze `storage/logs` nikdy nevystavovat veřejně (blokovat přes `.htaccess`/webserver).
 
 ## E) Admin rozhraní
 - Admin rozhraní je dostupné na **/admin** (odkaz se zobrazuje jen adminům).

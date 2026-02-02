@@ -10,6 +10,13 @@ class DebugCbpmrController extends Controller
 {
     public function trace()
     {
+        $serverToken = (string) env('DIAG_TOKEN');
+        $reqToken = (string) request()->query('token', '');
+
+        if (! $serverToken || ! hash_equals($serverToken, $reqToken)) {
+            abort(404);
+        }
+
         return response()->json([
             'ok' => true,
             'hit' => 'DebugCbpmrController@trace',
