@@ -57,7 +57,8 @@
                 <form action="submission" method="post" class="submission-form" id="submission-form">
                     <input type="hidden" name="_csrf" value="{{ Utilities::getCsrfToken() }}">
                     <input type="hidden" name="step" value="2">
-                    <input type="hidden" name="diaryOptions" value="{{ Session::get('diary.options') }}">
+                    <input type="hidden" name="diaryUrl" value="{{ old('diaryUrl', session('diary.url')) }}">
+                    <input type="hidden" name="diaryOptions" value="{{ old('diaryOptions', session('diary.options')) }}">
                     <div class="row">
                         <div class="col-12 col-md-6 form-group required">
                             <label for="contest">{{ __('Soutěž') }}</label>
