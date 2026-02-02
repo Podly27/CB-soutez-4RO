@@ -18,7 +18,7 @@
                     <script>location.hash = '#scroll'</script>
                 @elseif ($submissionErrors = Session::pull('submissionErrors'))
                     <div class="alert alert-danger">
-                        @if (count($submissionErrors) == 1)
+                        @if ((is_countable($submissionErrors) ? count($submissionErrors) : 0) == 1)
                             {{ $submissionErrors[0] }}
                         @else
                             <ul>
@@ -62,7 +62,7 @@
                         <div class="col-12 col-md-6 form-group required">
                             <label for="contest">{{ __('Soutěž') }}</label>
                             <select name="contest" class="form-control form-control-lg p-0 px-3" id="contest">
-                                @if (count($data->contests) > 1)
+                                @if ((is_countable($data->contests) ? count($data->contests) : 0) > 1)
                                 <option disabled selected value>{{ __('Vyber možnost...') }}</option>
                                 @endif
                                 @foreach ($data->contests as $contest)
@@ -73,7 +73,7 @@
                         <div class="col-12 col-md-6 form-group required">
                             <label for="category">{{ trans_choice('Kategorie', 1) }}</label>
                             <select name="category" class="form-control form-control-lg p-0 px-3" id="category">
-                                @if (count($data->categories) > 1)
+                                @if ((is_countable($data->categories) ? count($data->categories) : 0) > 1)
                                 <option disabled selected value>{{ __('Vyber možnost...') }}</option>
                                 @endif
                                 @foreach ($data->categories as $category)
