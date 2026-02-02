@@ -8,31 +8,25 @@ class StartSessionWithDebugBypass extends StartSession
 {
     public function handle($request, \Closure $next)
     {
-        // pokud existuje bypass logika, zachovej ji,
-        // ale vždy vrať Response
-        if (method_exists($this, 'shouldBypass') && $this->shouldBypass($request)) {
-            $resp = $next($request);
+        $safeNext = function ($req) use ($next) {
+            $resp = $next($req);
 
             if ($resp === null) {
-                $resp = response(
-                    'Downstream handler returned null (session bypass).',
+                return response(
+                    'Downstream handler returned null (wrapped by StartSessionWithDebugBypass).',
                     500
                 );
             }
 
             return $resp;
+        };
+
+        // bypass logika, pokud existuje – ale také používej safeNext
+        if (method_exists($this, 'shouldBypass') && $this->shouldBypass($request)) {
+            return $safeNext($request);
         }
 
-        $resp = parent::handle($request, $next);
-
-        if ($resp === null) {
-            $resp = response(
-                'Parent session middleware returned null.',
-                500
-            );
-        }
-
-        return $resp;
+        return parent::handle($request, $safeNext);
     }
 
     private function shouldBypass($request): bool
