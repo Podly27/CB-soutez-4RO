@@ -28,6 +28,114 @@ Local tests can be run as follows:
 docker exec ctvero-lumen vendor/bin/phpunit -v
 ```
 
+## Architektura aplikace (stručně)
+
+- **Frontend:** formuláře, login a validační UI v browseru.  
+- **Backend:** Lumen aplikace (routing + controllers + služby).  
+- **Integrace:**  
+  - OAuth (Facebook, Google, X).  
+  - CBPMR import (sdílené deníky přes veřejné share linky).  
+
+## Přehled hlavních funkcí
+
+- Přihlášení uživatelů (OAuth).  
+- Odesílání deníků.  
+- Import deníku z CBPMR přes veřejný share link.  
+- Admin rozhraní (správa závodů, deníků).  
+
+## CBPMR Import – jak to funguje
+
+**1) Uživatel vloží URL**  
+- `/share/<token>`  
+- nebo `/share/portable/<id>`  
+
+**2) Backend**  
+- `CbpmrShareService::fetch()`  
+  - následuje redirect  
+  - ukládá `final_url`, `http_code`, `body`  
+- `CbpmrShareService::parsePortable()`  
+  - parsuje HTML  
+  - získá:  
+    - portable_id  
+    - locator, place  
+    - počet QSO  
+    - seznam spojení (time, name, locator, km, note)  
+
+**3) SubmissionController**  
+- validuje vstup  
+- mapuje parsed data do interní DB struktury  
+- uloží deník + QSO  
+
+```
+CBPMR share URL
+     |
+     v
+CbpmrShareService::fetch()
+     |
+     v
+CbpmrShareService::parsePortable()
+     |
+     v
+SubmissionController (validate + map + store)
+```
+
+## Debug nástroje
+
+### Debug endpointy
+
+⚠️ Debug endpointy **nejsou určeny pro běžné uživatele** a v produkci **vyžadují DIAG token**.
+
+- `/_debug/ping-json`  
+  → ověření, že routing + JSON odpověď fungují  
+  - Parametry: žádné  
+  - Úspěch: `{"ok": true, "ts": "...ISO8601..."}`  
+  - Typická chyba: N/A (endpoint neověřuje token, problém bude spíš 404/500 z routingu)  
+
+- `/_debug/trace`  
+  → ověření, že controller + middleware jsou funkční  
+  - Parametry: žádné  
+  - Úspěch: `{"ok": true, "hit": "DebugCbpmrController@trace", "app_env": "...", "php": "...", "has_diag_token": true}`  
+  - Typická chyba: 500 (např. při fatální chybě v middleware), případně 404 při špatném routingu  
+
+- `/_debug/cbpmr-parse`  
+  → kompletní fetch + parse CBPMR  
+  - Parametry:  
+    - `token`: DIAG token  
+    - `url`: CBPMR share URL (musí být `https://cbpmr.info/share/...`)  
+  - Úspěch: `{"ok": true, "stage": "return_ok", "final_url": "...", "portable_id": "...", "rows_found": 123, "first_rows": [...]}`  
+  - Typická chyba: `{"ok": false, "error": "missing_token|missing_url|invalid_host|http_error|no_rows_found|exception", "stage": "..."}`  
+
+## Jak postupovat, když něco přestane fungovat
+
+1. **Nejde login?**  
+   - zkontroluj `.env` (OAuth keys)  
+   - zkontroluj redirect URI  
+   - zkontroluj logy OAuth chyb  
+
+2. **Nejde odeslat formulář / 500 error?**  
+   - zkontroluj `storage/` a `bootstrap/cache`  
+   - zkontroluj povinné ENV proměnné (MAIL, OWNER_MAIL)  
+
+3. **Nefunguje CBPMR import?**  
+   - otevři share URL ručně v prohlížeči  
+   - zkus debug endpoint  
+   - ověř, že stránka je veřejná  
+   - zkontroluj, zda CBPMR nezměnil HTML strukturu  
+
+## Dokumentace prostředí (ENV)
+
+Podrobný seznam proměnných najdeš v [docs/env.md](docs/env.md).
+
+## Co se může rozbít časem
+
+- změna HTML struktury CBPMR  
+- změny OAuth API (Facebook/X/Google)  
+- PHP/Lumen upgrade  
+
+Doporučení:  
+- používat debug endpointy  
+- testovat import při každé větší změně  
+
 ## Analýza projektu (aktuální stav)
 
 - **Technologie a běh aplikace:** Lumen aplikace s definovanými routami v `routes/web.php`, včetně `/health` endpointu s kontrolou DB a vracením `APP_URL`.  
