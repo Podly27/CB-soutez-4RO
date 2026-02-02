@@ -174,16 +174,21 @@ class SubmissionController extends Controller
             throw new \RuntimeException('Invalid CBPMR.info portable response.');
         }
 
+        $normalizedLocator = $this->normalizeLocator($locator);
+        if ($normalizedLocator === null) {
+            throw new \RuntimeException('Invalid CBPMR.info locator.');
+        }
+
         $rowsFound = $payload['rows_found'] ?? null;
         $qsoCountHeader = $payload['qso_count_header'] ?? null;
-        $qsoCount = $rowsFound && $rowsFound > 0 ? $rowsFound : $this->extractInt($qsoCountHeader);
+        $qsoCount = $this->resolveCbpmrQsoCount($rowsFound, $qsoCountHeader, $totalCalls);
 
         $this->diaryUrl = $originalUrl;
         $this->callSign = $expName ?? $place;
         $this->qthName = $place;
-        $this->qthLocator = $locator;
-        $this->qsoCount = $qsoCount ?? $totalCalls;
-        $this->diaryOptions = [
+        $this->qthLocator = $normalizedLocator;
+        $this->qsoCount = $qsoCount;
+        $this->diaryOptions = $this->ensureDiaryOptions([
             'source' => 'cbpmr',
             'original_url' => $originalUrl,
             'final_url' => $finalUrl,
@@ -191,7 +196,7 @@ class SubmissionController extends Controller
             'total_km' => $payload['total_km'] ?? null,
             'entries' => $this->mapCbpmrEntries($entries),
             'fetched_at' => \Carbon\Carbon::now()->toAtomString(),
-        ];
+        ]);
     }
 
     private function extractPortableIdFromPath(string $path): ?string
@@ -220,6 +225,47 @@ class SubmissionController extends Controller
         }
 
         return null;
+    }
+
+    private function normalizeLocator(?string $locator): ?string
+    {
+        if (! is_string($locator)) {
+            return null;
+        }
+
+        $normalized = strtoupper(preg_replace('/\s+/', '', $locator));
+
+        return strlen($normalized) === 6 ? $normalized : null;
+    }
+
+    private function resolveCbpmrQsoCount($rowsFound, ?string $qsoCountHeader, int $totalCalls): int
+    {
+        $rowsFoundInt = is_numeric($rowsFound) ? (int) $rowsFound : null;
+        $qsoCount = $rowsFoundInt && $rowsFoundInt > 0 ? $rowsFoundInt : $this->extractInt($qsoCountHeader);
+        if (! $qsoCount || $qsoCount <= 0) {
+            $qsoCount = $totalCalls;
+        }
+
+        if ($qsoCount <= 0) {
+            throw new \RuntimeException('Invalid CBPMR.info QSO count.');
+        }
+
+        return $qsoCount;
+    }
+
+    private function ensureDiaryOptions(array $options): array
+    {
+        $encoded = json_encode($options, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($encoded === false) {
+            throw new \RuntimeException('Invalid CBPMR.info diary options.');
+        }
+
+        $decoded = json_decode($encoded, true);
+        if (! is_array($decoded)) {
+            throw new \RuntimeException('Invalid CBPMR.info diary options.');
+        }
+
+        return $decoded;
     }
 
     private function mapCbpmrEntries(array $entries): array
@@ -329,7 +375,7 @@ class SubmissionController extends Controller
 
             $optionsJson = null;
             if (is_array($this->diaryOptions)) {
-                $optionsJson = json_encode($this->diaryOptions, JSON_UNESCAPED_SLASHES);
+                $optionsJson = json_encode($this->diaryOptions, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             }
 
             Session::flash('diary', [
