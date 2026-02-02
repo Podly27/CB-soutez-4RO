@@ -1,3 +1,29 @@
+@php
+    $safeCount = function ($v) {
+        return is_countable($v) ? count($v) : 0;
+    };
+
+    $asArray = function ($v) {
+        if (is_array($v)) return $v;
+
+        // kolekce / objekt, který lze iterovat
+        if (is_object($v)) {
+            if ($v instanceof \Illuminate\Support\Collection) return $v->all();
+            if ($v instanceof \Traversable) return iterator_to_array($v);
+        }
+
+        // JSON string -> array
+        if (is_string($v)) {
+            $decoded = json_decode($v, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        return [];
+    };
+@endphp
+
 @extends('layouts.app')
 
 @section('title', $title)
@@ -18,11 +44,11 @@
                     <script>location.hash = '#scroll'</script>
                 @elseif ($submissionErrors = Session::pull('submissionErrors'))
                     <div class="alert alert-danger">
-                        @if ((is_countable($submissionErrors) ? count($submissionErrors) : 0) == 1)
+                        @if ($safeCount($submissionErrors) == 1)
                             {{ $submissionErrors[0] }}
                         @else
                             <ul>
-                            @foreach ($submissionErrors as $error)
+                            @foreach ($asArray($submissionErrors) as $error)
                                 <li>{{ $error }}</li>
                             @endforeach
                             </ul>
@@ -62,10 +88,10 @@
                         <div class="col-12 col-md-6 form-group required">
                             <label for="contest">{{ __('Soutěž') }}</label>
                             <select name="contest" class="form-control form-control-lg p-0 px-3" id="contest">
-                                @if ((is_countable($data->contests) ? count($data->contests) : 0) > 1)
+                                @if ($safeCount($data->contests) > 1)
                                 <option disabled selected value>{{ __('Vyber možnost...') }}</option>
                                 @endif
-                                @foreach ($data->contests as $contest)
+                                @foreach ($asArray($data->contests) as $contest)
                                     <option value="{{ $contest->name }}" {{ Session::get('diary.contest') == $contest->name ? ' selected' : '' }}>{{ Utilities::contestL10n($contest->name) }}</option>
                                 @endforeach
                             </select>
@@ -73,10 +99,10 @@
                         <div class="col-12 col-md-6 form-group required">
                             <label for="category">{{ trans_choice('Kategorie', 1) }}</label>
                             <select name="category" class="form-control form-control-lg p-0 px-3" id="category">
-                                @if ((is_countable($data->categories) ? count($data->categories) : 0) > 1)
+                                @if ($safeCount($data->categories) > 1)
                                 <option disabled selected value>{{ __('Vyber možnost...') }}</option>
                                 @endif
-                                @foreach ($data->categories as $category)
+                                @foreach ($asArray($data->categories) as $category)
                                     <option value="{{ $category->name }}" {{ Session::get('diary.category') == $category->name ? ' selected' : '' }}>{{ __($category->name) }}</option>
                                 @endforeach
                             </select>
