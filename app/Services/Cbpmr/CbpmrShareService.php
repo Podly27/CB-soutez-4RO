@@ -61,12 +61,14 @@ class CbpmrShareService
 
         return [
             'portable_id' => $payload['portable_id'],
+            'title' => $payload['title'],
             'my_locator' => $payload['my_locator'],
             'place' => $payload['place'],
             'qso_count_header' => $payload['qso_count_header'],
             'total_km' => $payload['total_km'],
             'rows_found' => $payload['rows_found'],
             'first_rows' => $firstRows,
+            'entries' => $payload['entries'],
         ];
     }
 
@@ -153,6 +155,7 @@ class CbpmrShareService
 
     private function buildPortablePayload(string $html, string $finalUrl): array
     {
+        $title = $this->extractTitleSnippet($html);
         $xpath = $this->createXPath($html);
 
         $myLocator = $this->normalizeText($this->textFromXPath($xpath, '//*[@id="locator"]'));
@@ -200,6 +203,7 @@ class CbpmrShareService
 
         return [
             'portable_id' => $portableId,
+            'title' => $title,
             'my_locator' => $myLocator !== '' ? $myLocator : null,
             'place' => $place !== '' ? $place : null,
             'qso_count_header' => $qsoCountHeader !== '' ? $qsoCountHeader : null,

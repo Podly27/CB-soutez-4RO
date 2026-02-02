@@ -44,7 +44,7 @@
                     <div class="form-group">
                         <label for="diaryUrl">{{ __('Odkaz na deník') }} ({{ $diarySources }})...</label>
                         <input name="diaryUrl" type="text" class="form-control" id="diaryUrl" placeholder="http://">
-                        <small class="form-text text-muted">{{ __('Pro CBPMR používejte odkaz ve formátu /share/portable/<id>.') }}</small>
+                        <small class="form-text text-muted">{{ __('Podporujeme import z CBPMR (odkaz /share/...). Stačí vložit odkaz ze sdíleného deníku.') }}</small>
                     </div>
                     <button type="submit" class="btn btn-primary g-recaptcha" data-sitekey="{{ config('ctvero.recaptchaSiteKey') }}" data-callback="onSubmit" data-action="submit">{{ __('Načíst údaje z deníku') }}</button>
                 </form>
@@ -85,7 +85,7 @@
                     <div class="form-group">
                         <label for="diaryUrl">{{ __('URL deníku') }}</label>
                         <input name="diaryUrl" class="form-control" id="diaryUrl" type="text" placeholder="{{ __('URL adresa deníku určená ke sdílení') }}" value="{{ Session::get('diary.url') }}">
-                        <small class="form-text text-muted">{{ __('Pro CBPMR používejte odkaz ve formátu /share/portable/<id>.') }}</small>
+                        <small class="form-text text-muted">{{ __('Podporujeme import z CBPMR (odkaz /share/...). Stačí vložit odkaz ze sdíleného deníku.') }}</small>
                     </div>
                     <div class="form-group required">
                         <label for="callSign">{{ __('Volačka') }}</label>
