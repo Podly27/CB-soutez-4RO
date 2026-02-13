@@ -78,7 +78,7 @@
                         <input name="diaryUrl" type="text" class="form-control" id="diaryUrl" placeholder="http://">
                         <small class="form-text text-muted">{{ __('Podporujeme import z CBPMR (odkaz /share/...). Stačí vložit odkaz ze sdíleného deníku.') }}</small>
                     </div>
-                    <button type="submit" class="btn btn-primary g-recaptcha" data-sitekey="{{ config('ctvero.recaptchaSiteKey') }}" data-callback="onSubmit" data-action="submit">{{ __('Načíst údaje z deníku') }}</button>
+                    <button type="submit" class="btn btn-primary">{{ __('Načíst údaje z deníku') }}</button>
                 </form>
                 <div class="row col-12 align-items-center mt-2">
                     <p>{{ __('Nebo') }} <p><a href="{{ route('submissionForm', [ 'step' => 2 ]) . '#scroll' }}" class="btn btn-secondary ml-4" role="button">{{ __('Vyplnit hlášení ručně') }}</a>
@@ -171,7 +171,7 @@
                             <input name="email" class="form-control" id="email" type="email" placeholder="name@example.com" value="{{ Session::get('diary.email', Auth::user()->email ?? '') }}">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary g-recaptcha" data-sitekey="{{ config('ctvero.recaptchaSiteKey') }}" data-callback="onSubmit" data-action="submit">{{ __('Odeslat') }}</button>
+                    <button type="submit" class="btn btn-primary">{{ __('Odeslat') }}</button>
                 </form>
                 <div class="row col-12 align-items-center mt-2">
                     <p>{{ __('Nebo') }} <p><a href="{{ route('submissionForm', [ 'step' => 1 ]) . '#scroll' }}" class="btn btn-secondary ml-4" role="button">{{ __('Zpět na výběr deníku') }}</a>

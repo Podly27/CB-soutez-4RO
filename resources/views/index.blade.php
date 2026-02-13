@@ -123,7 +123,7 @@
                             <label for="message" class="col-12">{{ __('Zpráva') }}</label>
                             <textarea name="message" class="form-control col-12" id="message" placeholder="{{ __('Text zprávy') }}" rows="6"></textarea>
                         </div>
-                        <button type="submit" class="btn btn-primary g-recaptcha" data-sitekey="{{ config('ctvero.recaptchaSiteKey') }}" data-callback="onSubmit" data-action="submit">{{ __('Odeslat') }}</button>
+                        <button type="submit" class="btn btn-primary">{{ __('Odeslat') }}</button>
                     </form>
                 </div>
             </div>
