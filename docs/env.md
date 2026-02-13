@@ -58,8 +58,9 @@ Tento dokument shrnuje důležité proměnné prostředí. U každé položky je
 
 - `CTVERO_API_ADMIN_SECRET` – tajný klíč pro admin API (migrace, provozní akce).
   - Pokud chybí, admin API akce neproběhnou.
-- `CTVERO_RECAPTCHA_SITE_KEY`, `CTVERO_RECAPTCHA_SECRET` – reCAPTCHA pro ochranu formulářů.
-  - Pokud chybí, ochrana proti spamu nebude fungovat.
+- `CTVERO_RECAPTCHA_SITE_KEY`, `CTVERO_RECAPTCHA_ENTERPRISE_PROJECT_ID`, `CTVERO_RECAPTCHA_ENTERPRISE_API_KEY`, `CTVERO_RECAPTCHA_EXPECTED_ACTION`, `CTVERO_RECAPTCHA_SCORE_THRESHOLD` – reCAPTCHA Enterprise pro ochranu formulářů.
+  - `CTVERO_RECAPTCHA_SECRET` zůstává jako fallback pro původní ověřování.
+  - Pokud chybí enterprise i fallback klíče, ochrana proti spamu nebude fungovat.
 - `CTVERO_MAPBOX_ACCESS_TOKEN` – Mapbox token pro mapy.
   - Pokud chybí, mapy se nenačtou.
 - `CTVERO_CBPMR_INFO_API_URL`, `CTVERO_CBPMR_INFO_API_AUTH_USERNAME`, `CTVERO_CBPMR_INFO_API_AUTH_PASSWORD` – CBPMR API integrace (pokud je využita).

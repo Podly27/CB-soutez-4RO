@@ -24,19 +24,139 @@ class Utilities {
         if (Auth::check()) {
             return true;
         }
-        $recaptchaSecret = config('ctvero.recaptchaSecret');
-        if (empty($recaptchaSecret)) {
-            self::logRecaptchaWarning('Missing reCAPTCHA secret. Skipping validation.');
+
+        $token = request()->input('g-recaptcha-response');
+        if (! is_string($token) || trim($token) === '') {
+            throw new ForbiddenException();
+        }
+
+        $projectId = config('ctvero.recaptchaEnterpriseProjectId');
+        $apiKey = config('ctvero.recaptchaEnterpriseApiKey');
+
+        if (is_string($projectId) && trim($projectId) !== '' && is_string($apiKey) && trim($apiKey) !== '') {
+            self::verifyRecaptchaEnterprise($token, trim($projectId), trim($apiKey));
             return true;
         }
+
+        $recaptchaSecret = config('ctvero.recaptchaSecret');
+        if (empty($recaptchaSecret)) {
+            self::logRecaptchaWarning('Missing reCAPTCHA credentials. Skipping validation.');
+            return true;
+        }
+
         $recaptcha = new ReCaptcha($recaptchaSecret);
-        $response = $recaptcha->setScoreThreshold(config('ctvero.recaptchaScoreThreshold'))
-            ->verify(request()->input('g-recaptcha-response'), request()->ip());
+        $response = $recaptcha->setScoreThreshold((float) config('ctvero.recaptchaScoreThreshold'))
+            ->verify($token, request()->ip());
         Log::info('Received reCAPTCHA response:', [ var_export($response, true) ]);
         if (! $response->isSuccess()) {
             throw new ForbiddenException();
         }
+
         return true;
+    }
+
+    private static function verifyRecaptchaEnterprise(string $token, string $projectId, string $apiKey): void
+    {
+        $endpoint = sprintf(
+            'https://recaptchaenterprise.googleapis.com/v1/projects/%s/assessments?key=%s',
+            rawurlencode($projectId),
+            rawurlencode($apiKey)
+        );
+
+        $expectedAction = (string) config('ctvero.recaptchaExpectedAction', 'submit');
+        $siteKey = (string) config('ctvero.recaptchaSiteKey');
+        if ($siteKey === '') {
+            self::logRecaptchaWarning('Missing reCAPTCHA site key for enterprise verification.');
+            throw new ForbiddenException();
+        }
+
+        $body = [
+            'event' => [
+                'token' => $token,
+                'siteKey' => $siteKey,
+                'expectedAction' => $expectedAction,
+                'userIpAddress' => request()->ip(),
+                'userAgent' => request()->userAgent(),
+            ],
+        ];
+
+        $responsePayload = self::postJson($endpoint, $body);
+
+        $tokenProperties = $responsePayload['tokenProperties'] ?? [];
+        if (($tokenProperties['valid'] ?? false) !== true) {
+            Log::warning('reCAPTCHA Enterprise rejected token.', [
+                'invalid_reason' => $tokenProperties['invalidReason'] ?? null,
+                'action' => $tokenProperties['action'] ?? null,
+            ]);
+            throw new ForbiddenException();
+        }
+
+        if (($tokenProperties['action'] ?? null) !== $expectedAction) {
+            Log::warning('reCAPTCHA Enterprise action mismatch.', [
+                'expected_action' => $expectedAction,
+                'actual_action' => $tokenProperties['action'] ?? null,
+            ]);
+            throw new ForbiddenException();
+        }
+
+        $score = $responsePayload['riskAnalysis']['score'] ?? null;
+        $threshold = (float) config('ctvero.recaptchaScoreThreshold', 0.5);
+        if (! is_numeric($score) || (float) $score < $threshold) {
+            Log::warning('reCAPTCHA Enterprise risk score below threshold.', [
+                'score' => $score,
+                'threshold' => $threshold,
+                'reasons' => $responsePayload['riskAnalysis']['reasons'] ?? [],
+            ]);
+            throw new ForbiddenException();
+        }
+    }
+
+    private static function postJson(string $url, array $body): array
+    {
+        $payload = json_encode($body, JSON_UNESCAPED_SLASHES);
+        if ($payload === false) {
+            throw new ForbiddenException();
+        }
+
+        $ch = curl_init($url);
+        if (! $ch) {
+            throw new ForbiddenException();
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => 10,
+            CURLOPT_CONNECTTIMEOUT => 5,
+        ]);
+
+        $rawBody = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = $rawBody === false ? curl_error($ch) : null;
+        curl_close($ch);
+
+        if ($rawBody === false) {
+            Log::warning('reCAPTCHA Enterprise request failed.', [
+                'error' => $curlError,
+            ]);
+            throw new ForbiddenException();
+        }
+
+        $decoded = json_decode($rawBody, true);
+        if (! is_array($decoded) || $httpCode < 200 || $httpCode >= 300) {
+            Log::warning('reCAPTCHA Enterprise returned invalid response.', [
+                'http_code' => $httpCode,
+                'response' => is_array($decoded) ? $decoded : $rawBody,
+            ]);
+            throw new ForbiddenException();
+        }
+
+        return $decoded;
     }
 
     private static function logRecaptchaWarning(string $message): void

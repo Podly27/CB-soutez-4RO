@@ -32,8 +32,12 @@
 - Pokud je zapnutá, musí být nastaveny klíče v `.env`:
   ```
   CTVERO_RECAPTCHA_SITE_KEY=
-  CTVERO_RECAPTCHA_SECRET=
+  CTVERO_RECAPTCHA_ENTERPRISE_PROJECT_ID=
+  CTVERO_RECAPTCHA_ENTERPRISE_API_KEY=
+  CTVERO_RECAPTCHA_EXPECTED_ACTION=submit
   CTVERO_RECAPTCHA_SCORE_THRESHOLD=0.5
+  # fallback pro legacy kontrolu:
+  CTVERO_RECAPTCHA_SECRET=
   ```
 - Pokud nejsou klíče nastavené, aplikace **nesmí padat 500** – uživatel musí dostat srozumitelnou hlášku.
 
