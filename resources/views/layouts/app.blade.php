@@ -215,7 +215,7 @@
         @yield('sections')
 
         <footer class="mt-5">
-            <p class="text-center small">Copyright © 2020-2022 Radek Lichnov. Design: <a href="https://www.tooplate.com/">Tooplate</a>
+            <p class="text-center small">Copyright © 2020-{{ date('Y') }} Radek Lichnov. Design: <a href="https://www.tooplate.com/">Tooplate</a>
             | {!! __('Tento <a href=":repositoryLink">projekt</a> je open-source', [ 'repositoryLink' => config('ctvero.repositoryUrl') ]) !!}. Engine: <a href="https://lumen.laravel.com/">Lumen Framework</a>
             | {{ __('Překlad do němčiny') }}: KML - Kamillo</p>
         </footer>
