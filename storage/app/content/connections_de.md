@@ -1,3 +1,3 @@
-Jede notierte Verbindung sollte folgendes enthalten: Gegenstation (Rufzeichen oder Name), QTH - Ort, von dem diese sendet, deren [Locator](https://translate.google.com/website?sl=cs&tl=de&ajax=1&elem=1&se=1&u=http://www.cbpmr.cz/lokatorova-mapa-gps.html), einen Signalraport.
+Jede notierte Verbindung sollte folgendes enthalten: Gegenstation (Rufzeichen oder Name), QTH - Ort, von dem diese sendet, deren [Locator](https://translate.google.com/website?sl=cs&tl=de&ajax=1&elem=1&se=1&u=https://whatsmylocator.co.uk/), einen Signalraport.
 
 Es gibt 1 Punkt für jede Verbindung. Sollte die Gegenstation ihre Position ändern und zu einem anderen Locator wechseln (weiter als der angrenzende), wird dies als weitere Verbindung gewertet. Ihr könnt Verbindungen über einen Repeater auch anrechnen lassen (1 Punkt für alle Verbindungen über den gleichen Repeater). Beim Senden von mehreren Orten aus, notiert den "besten" QTH in den Raport und summiert alle Verbindungen.
