@@ -1,4 +1,4 @@
-@if (! Auth::check())
+@if (! Auth::check() && config('ctvero.recaptchaSiteKey'))
     <script src="https://www.google.com/recaptcha/enterprise.js?render={{ config('ctvero.recaptchaSiteKey') }}"></script>
 
     <script>

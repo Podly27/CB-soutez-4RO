@@ -26,20 +26,26 @@ class Utilities {
         }
 
         $token = request()->input('g-recaptcha-response');
+        $siteKey = trim((string) config('ctvero.recaptchaSiteKey', ''));
+        $projectId = trim((string) config('ctvero.recaptchaEnterpriseProjectId', ''));
+        $apiKey = trim((string) config('ctvero.recaptchaEnterpriseApiKey', ''));
+        $recaptchaSecret = trim((string) config('ctvero.recaptchaSecret', ''));
+
+        if ($siteKey === '') {
+            self::logRecaptchaWarning('Missing reCAPTCHA site key. Skipping validation.');
+            return true;
+        }
+
         if (! is_string($token) || trim($token) === '') {
             throw new ForbiddenException();
         }
 
-        $projectId = config('ctvero.recaptchaEnterpriseProjectId');
-        $apiKey = config('ctvero.recaptchaEnterpriseApiKey');
-
-        if (is_string($projectId) && trim($projectId) !== '' && is_string($apiKey) && trim($apiKey) !== '') {
-            self::verifyRecaptchaEnterprise($token, trim($projectId), trim($apiKey));
+        if ($projectId !== '' && $apiKey !== '') {
+            self::verifyRecaptchaEnterprise($token, $projectId, $apiKey);
             return true;
         }
 
-        $recaptchaSecret = config('ctvero.recaptchaSecret');
-        if (empty($recaptchaSecret)) {
+        if ($recaptchaSecret === '') {
             self::logRecaptchaWarning('Missing reCAPTCHA credentials. Skipping validation.');
             return true;
         }
@@ -64,11 +70,7 @@ class Utilities {
         );
 
         $expectedAction = (string) config('ctvero.recaptchaExpectedAction', 'submit');
-        $siteKey = (string) config('ctvero.recaptchaSiteKey');
-        if ($siteKey === '') {
-            self::logRecaptchaWarning('Missing reCAPTCHA site key for enterprise verification.');
-            throw new ForbiddenException();
-        }
+        $siteKey = trim((string) config('ctvero.recaptchaSiteKey', ''));
 
         $body = [
             'event' => [

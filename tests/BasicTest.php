@@ -194,6 +194,33 @@ class BasicTest extends TestCase
         config([ 'app.env' => $originalConfig ]);
     }
 
+    public function testMessageSendDoesNotRequireLoginWhenRecaptchaSiteKeyMissing()
+    {
+        $originalConfig = config('app.env');
+        config([
+            'app.env' => 'production',
+            'ctvero.recaptchaSiteKey' => null,
+            'ctvero.recaptchaSecret' => null,
+            'ctvero.recaptchaEnterpriseProjectId' => 'test-project',
+            'ctvero.recaptchaEnterpriseApiKey' => 'test-api-key',
+        ]);
+
+        $this->get('/');
+        $doc = new \DiDom\Document($this->response->getContent(), false);
+        $csrfToken = $doc->first('form#contact-form input[name=_csrf]')->value;
+
+        $this->post('/message', [
+            '_csrf' => $csrfToken,
+            'name' => 'Tester',
+            'email' => 'tester@example.com',
+            'subject' => 'Hello',
+            'message' => 'Test message',
+        ]);
+
+        $this->assertTrue(in_array($this->response->getStatusCode(), [200, 302], true));
+        config([ 'app.env' => $originalConfig ]);
+    }
+
     public function testWrongMethodOnMessageSend()
     {
         $this->get('/message');
@@ -209,6 +236,30 @@ class BasicTest extends TestCase
         config([ 'app.env' => 'production' ]);
         $this->post('/submission', [ 'step' => 1 ]);
         $this->seeStatusCode(403);
+        config([ 'app.env' => $originalConfig ]);
+    }
+
+    public function testSubmissionSendDoesNotRequireLoginWhenRecaptchaSiteKeyMissing()
+    {
+        $originalConfig = config('app.env');
+        config([
+            'app.env' => 'production',
+            'ctvero.recaptchaSiteKey' => null,
+            'ctvero.recaptchaSecret' => null,
+            'ctvero.recaptchaEnterpriseProjectId' => 'test-project',
+            'ctvero.recaptchaEnterpriseApiKey' => 'test-api-key',
+        ]);
+
+        $this->get('/submission');
+        $doc = new \DiDom\Document($this->response->getContent(), false);
+        $csrfToken = $doc->first('form#submission-form input[name=_csrf]')->value;
+
+        $this->post('/submission', [
+            '_csrf' => $csrfToken,
+            'step' => 2,
+        ]);
+
+        $this->assertNotSame(403, $this->response->getStatusCode());
         config([ 'app.env' => $originalConfig ]);
     }
 
